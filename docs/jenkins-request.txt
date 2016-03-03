@@ -1,0 +1,39 @@
+----------- SERVER -----------------
+{
+    "REDIRECT_STATUS": "200",
+    "HTTP_HOST": "drongar.int.kn",
+    "HTTP_CONNECTION": "Keep-Alive",
+    "HTTP_USER_AGENT": "Apache-HttpClient\/4.5.1 (Java\/1.8.0_74)",
+    "PATH": "\/sbin:\/usr\/sbin:\/bin:\/usr\/bin",
+    "SERVER_SIGNATURE": "",
+    "SERVER_SOFTWARE": "Apache\/2.2.15 (Red Hat)",
+    "SERVER_NAME": "drongar.int.kn",
+    "SERVER_ADDR": "10.61.41.123",
+    "SERVER_PORT": "80",
+    "REMOTE_HOST": "clarke.int.kn",
+    "REMOTE_ADDR": "10.61.41.107",
+    "DOCUMENT_ROOT": "\/data\/www",
+    "SERVER_ADMIN": "portaladmin@kuehne-nagel.com",
+    "SCRIPT_FILENAME": "\/data\/www\/fenkins\/index.php",
+    "REMOTE_PORT": "58836",
+    "REDIRECT_QUERY_STRING": "path=git\/notifyCommit",
+    "REDIRECT_URL": "\/fenkins\/git\/notifyCommit",
+    "GATEWAY_INTERFACE": "CGI\/1.1",
+    "SERVER_PROTOCOL": "HTTP\/1.1",
+    "REQUEST_METHOD": "GET",
+    "QUERY_STRING": "path=git\/notifyCommit",
+    "REQUEST_URI": "\/fenkins\/git\/notifyCommit?url=&branches=master&sha1=bae045dc8adb7195c995552bde4fe5e461ebeffc",
+    "SCRIPT_NAME": "\/fenkins\/index.php",
+    "PHP_SELF": "\/fenkins\/index.php",
+    "REQUEST_TIME_FLOAT": 1457007388.774,
+    "REQUEST_TIME": 1457007388
+}
+-----------------------------------------
+----------- POST -------------------
+[]
+-----------------------------------------
+-------------- GET -------------------
+{
+    "path": "git\/notifyCommit"
+}
+-----------------------------------------
