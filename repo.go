@@ -37,3 +37,18 @@ func (b *buildRepository) get(env string, ticket int64) []*buildResult {
 	}
 	return b.data[env][ticket]
 }
+
+func (b *buildRepository) deleteTicket(env string, ticket int64) {
+	b.mux.Lock()
+	defer b.mux.Unlock()
+
+	delete(b.data[env], ticket)
+}
+
+func (b *buildRepository) deleteEnv(env string) {
+	b.mux.Lock()
+	defer b.mux.Unlock()
+
+	delete(b.data, env)
+
+}

@@ -21,6 +21,18 @@ const (
 	buildActDestroy
 )
 
+func (a buildAct) String() string {
+	switch a {
+	case buildActCreate:
+		return "create"
+	case buildActUpdate:
+		return "update"
+	case buildActDestroy:
+		return "destroy"
+	}
+	return "unknown"
+}
+
 // TODO: Stuff from here comes from configuration
 func (a buildAct) command(b *build) *exec.Cmd {
 	switch a {
@@ -63,6 +75,7 @@ func (b *build) execResult(cmd *exec.Cmd) (*buildResult, error) {
 
 func (b *build) execute(act buildAct) {
 	cmd := act.command(b)
+	log.Printf("[build] env %s: branch %s: execute '%s'", b.env, b.branch, cmd)
 	br, err := b.execResult(cmd)
 	if err != nil {
 		log.Printf("command execution failed: %s", err)
@@ -89,6 +102,10 @@ func (b *build) request(act buildAct) {
 	b.acts <- act
 }
 
+func (b *build) destroy() {
+	close(b.acts)
+}
+
 type builds map[int64]*build // ticketNo : build
 
 func makeBuilds() builds {
@@ -98,6 +115,7 @@ func makeBuilds() builds {
 // A branch has been pushed: create env or deploy to existing
 func (b builds) push(ticket int64, build *build) error {
 	var act buildAct
+	// TODO: Handle master specially
 	if existingBuild, ok := b[ticket]; !ok {
 		b[ticket] = build
 		act = buildActCreate
@@ -116,5 +134,6 @@ func (b builds) merge(ticket int64) error {
 		return fmt.Errorf("unknown ticket #%d merged", ticket)
 	}
 	build.request(buildActDestroy)
+	build.destroy()
 	return nil
 }
