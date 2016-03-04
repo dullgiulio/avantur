@@ -39,6 +39,8 @@ func (s *server) serveBuilds() {
 		// TODO: Handle this by running git to get the last commit info
 		if n.branch == "master" {
 			log.Printf("[server] doing nothing for a push to master, for now")
+			// Find tickets ts that have been affected by merge, then for each t in ts:
+			//builds.merge(t, b)
 			continue
 		}
 		b, err := newBuild(n.env, n.branch, cf)
