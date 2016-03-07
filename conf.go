@@ -1,31 +1,41 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"regexp"
 	"strconv"
 	"time"
 )
 
 type config struct {
-	regexBranch *regexp.Regexp
+	BranchRegexp   string        `json:"branch_regexp"`
+	WorkspacesDir  string        `json:"workspaces_dir"`
+	LimitBuildsN   int           `json:"limit_builds"`
+	CommandTimeout time.Duration `json:"command_timeout"`
+	regexBranch    *regexp.Regexp
 	// Limit the number of concurrent builds that can be performed
-	limitBuilds    chan struct{}
-	commandTimeout time.Duration
+	limitBuilds chan struct{}
 }
 
-func newConfig(reBranch string, nbuilds int) *config {
-	c := &config{
-		regexBranch:    regexp.MustCompile(regexBranch),
-		commandTimeout: 2 * time.Second, // TODO: Make me some minutes
+func newConfig(fname string) (*config, error) {
+	file, err := ioutil.ReadFile(fname)
+	if err != nil {
+		return nil, err
 	}
-	if nbuilds > 0 {
-		c.limitBuilds = make(chan struct{}, nbuilds)
-		for i := 0; i < nbuilds; i++ {
+	var c config
+	if err = json.Unmarshal(file, &c); err != nil {
+		return nil, err
+	}
+	c.regexBranch = regexp.MustCompile(c.BranchRegexp)
+	if c.LimitBuildsN > 0 {
+		c.limitBuilds = make(chan struct{}, c.LimitBuildsN)
+		for i := 0; i < c.LimitBuildsN; i++ {
 			c.limitBuilds <- struct{}{}
 		}
 	}
-	return c
+	return &c, nil
 }
 
 func (c *config) parseTicketNo(branch string) (int64, error) {

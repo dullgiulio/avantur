@@ -28,8 +28,7 @@ func newServer() *server {
 	}
 }
 
-func (s *server) serveBuilds() {
-	cf := newConfig(regexBranch, 2)
+func (s *server) serveBuilds(cf *config) {
 	builds := makeBuilds()
 
 	for n := range s.notifs {

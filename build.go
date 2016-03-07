@@ -70,7 +70,7 @@ func newBuild(env, branch string, conf *config) (*build, error) {
 }
 
 func (b *build) execResult(cmd *exec.Cmd) (*buildResult, error) {
-	return execResult(cmd, b.conf.commandTimeout)
+	return execResult(cmd, b.conf.CommandTimeout)
 }
 
 func (b *build) execute(act buildAct) {
