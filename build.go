@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"time"
+
+	"github.com/dullgiulio/avantur/store"
 )
 
 type buildResult struct {
@@ -69,8 +72,8 @@ func newBuild(env, branch string, conf *config) (*build, error) {
 	return b, nil
 }
 
-func (b *build) execResult(cmd *exec.Cmd) (*buildResult, error) {
-	return execResult(cmd, b.conf.CommandTimeout)
+func (b *build) execResult(cmd *exec.Cmd) (*store.BuildResult, error) {
+	return execResult(cmd, time.Duration(b.conf.CommandTimeout))
 }
 
 func (b *build) execute(act buildAct) {
@@ -81,8 +84,17 @@ func (b *build) execute(act buildAct) {
 		log.Printf("command execution failed: %s", err)
 		return
 	}
-	// TODO: add the build result to global repo
-	fmt.Printf("%q\n", br)
+	if err = b.conf.storage.Add(b.env, b.ticketNo, br); err != nil {
+		log.Printf("cannot persist build result: %s", err)
+	}
+	/*
+		// TODO: Only if everythig is okay, we remove all results
+		if act == buildActDestroy {
+			if err = b.conf.storage.DeleteEnv(b.env); err != nil {
+				log.Printf("cannot remove build results for %s: %s", b.env, err)
+			}
+		}
+	*/
 }
 
 func (b *build) run() {

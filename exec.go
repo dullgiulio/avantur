@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os/exec"
 	"time"
+
+	"github.com/dullgiulio/avantur/store"
 )
 
-func execResult(cmd *exec.Cmd, timeout time.Duration) (*buildResult, error) {
+func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error) {
 	var err error
 	var out, errOut bytes.Buffer
 
@@ -35,10 +37,10 @@ func execResult(cmd *exec.Cmd, timeout time.Duration) (*buildResult, error) {
 	if werr != nil && err == nil {
 		err = werr
 	}
-	br := &buildResult{
-		stdout: out.Bytes(),
-		stderr: errOut.Bytes(),
-		retval: 0, // TODO: Use exec.ExitError...
+	br := &store.BuildResult{
+		Stdout: out.Bytes(),
+		Stderr: errOut.Bytes(),
+		Retval: 0, // TODO: Use exec.ExitError...
 	}
 	return br, err
 }

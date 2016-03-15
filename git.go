@@ -28,10 +28,10 @@ func gitLastCommit(dir string) (*gitcommit, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error executing git command: %s", err)
 	}
-	if len(br.stdout) > 0 && br.stdout[len(br.stdout)-1] == '\n' {
-		br.stdout = br.stdout[:len(br.stdout)-1]
+	if len(br.Stdout) > 0 && br.Stdout[len(br.Stdout)-1] == '\n' {
+		br.Stdout = br.Stdout[:len(br.Stdout)-1]
 	}
-	hashes := bytes.Split(br.stdout, []byte(" "))
+	hashes := bytes.Split(br.Stdout, []byte(" "))
 	ghashes := make([]githash, 0)
 	for i := range hashes {
 		if len(hashes[i]) > 0 {
