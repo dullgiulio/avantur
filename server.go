@@ -29,24 +29,15 @@ func newServer() *server {
 }
 
 func (s *server) serveBuilds(cf *config) {
-	builds := makeBuilds()
+	builds := makeBuilds(cf)
 
 	for n := range s.notifs {
 		log.Printf("[server] env %s: branch %s: handling notification for %s", n.env, n.branch, n.sha1)
-
-		// TODO: Make the test more refined: other branches might need special treatement
-		// TODO: Handle this by running git to get the last commit info
-		if n.branch == "master" {
-			log.Printf("[server] doing nothing for a push to master, for now")
-			// Find tickets ts that have been affected by merge, then for each t in ts:
-			//builds.merge(t, b)
-			continue
-		}
 		b, err := newBuild(n.env, n.branch, cf)
 		if err != nil {
 			log.Printf("%s: %s", n.branch, err)
 			continue
 		}
-		builds.push(b.ticketNo, b)
+		builds.push(b)
 	}
 }

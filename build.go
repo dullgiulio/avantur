@@ -40,11 +40,11 @@ func (a buildAct) String() string {
 func (a buildAct) command(b *build) *exec.Cmd {
 	switch a {
 	case buildActCreate:
-		return exec.Command("echo", "t3p", "env:init", fmt.Sprintf("%s.typo%d", b.env, b.ticketNo))
+		return exec.Command("t3p", "env:init", b.stage())
 	case buildActUpdate:
-		return exec.Command("echo", "t3p", "deploy", fmt.Sprintf("%s.typo%d", b.env, b.ticketNo))
+		return exec.Command("t3p", "deploy", b.stage())
 	case buildActDestroy:
-		return exec.Command("echo", "t3p", "env:del", fmt.Sprintf("%s.typo%d", b.env, b.ticketNo))
+		return exec.Command("t3p", "env:del", b.stage())
 	}
 	return nil
 }
@@ -58,18 +58,38 @@ type build struct {
 }
 
 func newBuild(env, branch string, conf *config) (*build, error) {
-	var err error
 	b := &build{
 		branch: branch,
 		env:    env,
 		conf:   conf,
 		acts:   make(chan buildAct), // TODO: can be buffered
 	}
-	if b.ticketNo, err = conf.parseTicketNo(branch); err != nil {
+	if err := b.ticket(); err != nil {
 		return nil, err
 	}
 	go b.run()
 	return b, nil
+}
+
+// TODO: This logic should be configurable (i.e. a map)
+func (b *build) stage() string {
+	if b.branch == "master" {
+		return fmt.Sprintf("%s.dev", b.env)
+	}
+	if b.branch == "production" {
+		return fmt.Sprintf("%s.hotfix", b.env)
+	}
+	return fmt.Sprintf("%s.typo%d", b.env, b.ticketNo)
+}
+
+func (b *build) ticket() error {
+	// TODO: Handle all special cases, make them configurable
+	if b.branch == "master" || b.branch == "production" {
+		return nil
+	}
+	var err error
+	b.ticketNo, err = b.conf.parseTicketNo(b.branch)
+	return err
 }
 
 func (b *build) execResult(cmd *exec.Cmd) (*store.BuildResult, error) {
@@ -81,11 +101,11 @@ func (b *build) execute(act buildAct) {
 	log.Printf("[build] env %s: branch %s: execute '%s'", b.env, b.branch, cmd)
 	br, err := b.execResult(cmd)
 	if err != nil {
-		log.Printf("command execution failed: %s", err)
+		log.Printf("[build] command execution failed: %s", err)
 		return
 	}
 	if err = b.conf.storage.Add(b.env, b.ticketNo, br); err != nil {
-		log.Printf("cannot persist build result: %s", err)
+		log.Printf("[build] cannot persist build result: %s", err)
 	}
 	/*
 		// TODO: Only if everythig is okay, we remove all results
@@ -118,17 +138,29 @@ func (b *build) destroy() {
 	close(b.acts)
 }
 
-type builds map[int64]*build // ticketNo : build
+type builds map[string]*build // stage : build
 
-func makeBuilds() builds {
-	return make(map[int64]*build)
+func makeBuilds(cf *config) builds {
+	bs := make(map[string]*build)
+	// TODO: Detect and prefill envs automatically from existing dirs
+	for _, env := range cf.Envs {
+		b, err := newBuild(env, "master", cf)
+		if err != nil {
+			log.Printf("[build] cannot add existing build %s: %s", b.stage(), err)
+			continue
+		}
+		bs[b.stage()] = b
+		log.Printf("[build] added existing build %s", b.stage())
+	}
+	return bs
 }
 
 // A branch has been pushed: create env or deploy to existing
-func (b builds) push(ticket int64, build *build) error {
+func (b builds) push(build *build) error {
 	var act buildAct
-	if existingBuild, ok := b[ticket]; !ok {
-		b[ticket] = build
+	stage := build.stage()
+	if existingBuild, ok := b[stage]; !ok {
+		b[stage] = build
 		act = buildActCreate
 	} else {
 		act = buildActUpdate
@@ -139,10 +171,10 @@ func (b builds) push(ticket int64, build *build) error {
 }
 
 // A branch has been merged to master, destory the env
-func (b builds) merge(ticket int64) error {
-	build, ok := b[ticket]
+func (b builds) merge(stage string) error {
+	build, ok := b[stage]
 	if !ok {
-		return fmt.Errorf("unknown ticket #%d merged", ticket)
+		return fmt.Errorf("unknown stage %s merged", stage)
 	}
 	build.request(buildActDestroy)
 	build.destroy()

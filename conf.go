@@ -35,6 +35,7 @@ type config struct {
 	WorkspacesDir  string   `json:"workspaces_dir"`
 	Database       string   `json:"database"`
 	Table          string   `json:"table"`
+	Envs           []string `json:"envs"`
 	LimitBuildsN   int      `json:"limit_builds"`
 	CommandTimeout duration `json:"command_timeout"`
 	regexBranch    *regexp.Regexp
