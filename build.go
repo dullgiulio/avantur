@@ -4,16 +4,30 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/dullgiulio/avantur/store"
 )
 
-type buildResult struct {
-	// dates start + date end
-	stdout []byte
-	stderr []byte
-	retval int
+type vars map[string]string
+
+func makeVars() vars {
+	return vars(make(map[string]string))
+}
+
+func (v vars) add(key, val string) {
+	v[fmt.Sprintf("{%s}", key)] = val
+}
+
+func (v vars) apply(a []string) []string {
+	res := make([]string, len(a))
+	for i := range a {
+		for key, val := range v {
+			res[i] = strings.Replace(a[i], key, val, -1)
+		}
+	}
+	return res
 }
 
 type buildAct int
@@ -36,17 +50,23 @@ func (a buildAct) String() string {
 	return "unknown"
 }
 
-// TODO: Stuff from here comes from configuration
 func (a buildAct) command(b *build) *exec.Cmd {
+	var cmd []string
+	vars := makeVars()
+	vars.add("STAGE", b.stage())
 	switch a {
 	case buildActCreate:
-		return exec.Command("t3p", "env:init", b.stage())
+		cmd = b.conf.Commands.CmdCreate
 	case buildActUpdate:
-		return exec.Command("t3p", "deploy", b.stage())
+		cmd = b.conf.Commands.CmdUpdate
 	case buildActDestroy:
-		return exec.Command("t3p", "env:del", b.stage())
+		cmd = b.conf.Commands.CmdDestroy
 	}
-	return nil
+	if cmd == nil {
+		return nil
+	}
+	cmd = vars.apply(cmd)
+	return exec.Command(cmd[0], cmd[1:]...)
 }
 
 type build struct {
@@ -98,7 +118,7 @@ func (b *build) execResult(cmd *exec.Cmd) (*store.BuildResult, error) {
 
 func (b *build) execute(act buildAct) {
 	cmd := act.command(b)
-	log.Printf("[build] env %s: branch %s: execute '%s'", b.env, b.branch, cmd)
+	log.Printf("[build] env %s: branch %s: execute '%s'", b.env, b.branch, strings.Join(cmd.Args, " "))
 	br, err := b.execResult(cmd)
 	if err != nil {
 		log.Printf("[build] command execution failed: %s", err)

@@ -38,7 +38,12 @@ type config struct {
 	Envs           []string `json:"envs"`
 	LimitBuildsN   int      `json:"limit_builds"`
 	CommandTimeout duration `json:"command_timeout"`
-	regexBranch    *regexp.Regexp
+	Commands       struct {
+		CmdCreate  []string `json:"create"`
+		CmdUpdate  []string `json:"update"`
+		CmdDestroy []string `json:"destroy"`
+	} `json:"commands"`
+	regexBranch *regexp.Regexp
 	// Limit the number of concurrent builds that can be performed
 	limitBuilds chan struct{}
 	storage     store.Store

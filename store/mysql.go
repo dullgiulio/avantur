@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -12,8 +11,8 @@ import (
 const createTable = `
 CREATE TABLE IF NOT EXISTS build_results (
   id int(11) NOT NULL AUTO_INCREMENT,
-  start date NOT NULL,
-  end date NOT NULL,
+  start datetime NOT NULL,
+  end datetime NOT NULL,
   env varchar(200) NOT NULL,
   ticket int(11) NOT NULL,
   exitcode int(11) NOT NULL,
@@ -52,20 +51,23 @@ func NewMysql(dsn, tableName string) (*Mysql, error) {
 
 func (m *Mysql) initStmts() error {
 	var err error
+	if _, err = m.db.Exec(createTable); err != nil {
+		return fmt.Errorf("cannot create storage table: %s", err)
+	}
 	if m.stmtAdd, err = m.db.Prepare(fmt.Sprintf(queryAdd, m.tableName)); err != nil {
-		return err
+		return fmt.Errorf("cannot prepare add statement: %s", err)
 	}
 	if m.stmtDelTicket, err = m.db.Prepare(fmt.Sprintf(queryDeleteTicket, m.tableName)); err != nil {
-		return err
+		return fmt.Errorf("cannot prepare delete by ticket statement: %s", err)
 	}
 	if m.stmtDelEnv, err = m.db.Prepare(fmt.Sprintf(queryDeleteEnv, m.tableName)); err != nil {
-		return err
+		return fmt.Errorf("cannot prepare delete by env statement: %s", err)
 	}
 	return nil
 }
 
 func (m *Mysql) Add(env string, ticket int64, br *BuildResult) error {
-	_, err := m.stmtAdd.Exec(&time.Time{}, &time.Time{}, env, ticket, br.Retval, br.Stdout, br.Stderr)
+	_, err := m.stmtAdd.Exec(br.Start, br.End, env, ticket, br.Retval, br.Stdout, br.Stderr)
 	return err
 }
 

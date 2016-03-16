@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/dullgiulio/avantur/store"
@@ -17,7 +18,9 @@ func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error
 	wait := make(chan error)
 	cmd.Stdout = &out
 	cmd.Stderr = &errOut
-
+	br := &store.BuildResult{
+		Start: time.Now(),
+	}
 	if err = cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -37,10 +40,15 @@ func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error
 	if werr != nil && err == nil {
 		err = werr
 	}
-	br := &store.BuildResult{
-		Stdout: out.Bytes(),
-		Stderr: errOut.Bytes(),
-		Retval: 0, // TODO: Use exec.ExitError...
+	retval := 0
+	if e, ok := err.(*exec.ExitError); ok {
+		if status, ok := e.Sys().(syscall.WaitStatus); ok {
+			retval = status.ExitStatus()
+		}
 	}
+	br.End = time.Now()
+	br.Retval = retval
+	br.Stdout = out.Bytes()
+	br.Stderr = errOut.Bytes()
 	return br, err
 }

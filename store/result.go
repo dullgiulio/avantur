@@ -1,7 +1,10 @@
 package store
 
+import "time"
+
 type BuildResult struct {
-	// dates start + date end
+	Start  time.Time
+	End    time.Time
 	Stdout []byte
 	Stderr []byte
 	Retval int
