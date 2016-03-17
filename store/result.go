@@ -8,11 +8,14 @@ type BuildResult struct {
 	Stdout []byte
 	Stderr []byte
 	Retval int
+	Ticket int64
+	Stage  string
+	Branch string
+	SHA1   string
 }
 
 type Store interface {
-	Add(env string, ticket int64, br *BuildResult) error
-	Get(env string, ticket int64) ([]*BuildResult, error)
-	DeleteTicket(env string, ticket int64) error
-	DeleteEnv(env string) error
+	Add(br *BuildResult) error
+	Get(stage string) ([]*BuildResult, error)
+	Delete(stage string) error
 }

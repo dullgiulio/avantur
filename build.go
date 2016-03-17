@@ -106,16 +106,18 @@ type build struct {
 	stage     string
 	branch    string
 	env       string
+	sha1      string
 	ticketNo  int64
 	conf      *config
 	acts      chan buildAct
 	stageVars vars
 }
 
-func newBuild(env, branch string, conf *config) (*build, error) {
+func newBuild(env, branch, sha1 string, conf *config) (*build, error) {
 	b := &build{
 		branch: branch,
 		env:    env,
+		sha1:   sha1,
 		conf:   conf,
 		acts:   make(chan buildAct), // TODO: can be buffered
 	}
@@ -139,10 +141,6 @@ func newBuild(env, branch string, conf *config) (*build, error) {
 }
 
 func (b *build) ticket() error {
-	// If this branch is one of the specially staged ones, nothing to do
-	if branchStages(b.conf.Branches).match(b.branch, "") != "" {
-		return nil
-	}
 	var err error
 	b.ticketNo, err = b.conf.parseTicketNo(b.branch)
 	return err
@@ -160,13 +158,16 @@ func (b *build) execute(act buildAct) {
 		log.Printf("[build] command execution failed: %s", err)
 		return
 	}
-	if err = b.conf.storage.Add(b.env, b.ticketNo, br); err != nil {
+	br.Branch = b.branch
+	br.SHA1 = b.sha1
+	br.Stage = b.stage
+	if err = b.conf.storage.Add(br); err != nil {
 		log.Printf("[build] cannot persist build result: %s", err)
 	}
 	/*
 		// TODO: Only if everythig is okay, we remove all results
 		if act == buildActDestroy {
-			if err = b.conf.storage.DeleteEnv(b.env); err != nil {
+			if err = b.conf.storage.Delete(b.stage); err != nil {
 				log.Printf("cannot remove build results for %s: %s", b.env, err)
 			}
 		}
@@ -200,7 +201,7 @@ func makeBuilds(cf *config) builds {
 	bs := make(map[string]*build)
 	// TODO: Detect and prefill envs automatically from existing dirs
 	for _, env := range cf.Envs {
-		b, err := newBuild(env, "master", cf)
+		b, err := newBuild(env, "master", "", cf)
 		if err != nil {
 			log.Printf("[build] cannot add existing build %s: %s", b.stage, err)
 			continue
