@@ -73,6 +73,35 @@ func (a buildAct) command(b *build) *exec.Cmd {
 	return exec.Command(cmd[0], cmd[1:]...)
 }
 
+type branchStages map[string]string
+
+// match returns the stage template for a branch
+func (br branchStages) match(branch, def string) string {
+	tmpl, ok := br[branch]
+	if ok {
+		return tmpl
+	}
+	var (
+		found bool
+		err   error
+	)
+	// Try if the branch matches a regex pattern
+	for pattern, stage := range br {
+		if pattern[0] != '^' {
+			continue
+		}
+		found, err = regexp.MatchString(pattern, branch)
+		if err != nil {
+			log.Printf("[build] cannot match %s against %s: %s", branch, pattern, err)
+			continue
+		}
+		if found {
+			return stage
+		}
+	}
+	return def
+}
+
 type build struct {
 	stage     string
 	branch    string
@@ -108,37 +137,14 @@ func (b *build) makeStage() string {
 	if b.stage != "" {
 		return b.stage
 	}
-	tmpl, ok := b.conf.Branches[b.branch]
-	if !ok {
-		var (
-			found bool
-			err   error
-		)
-		// Try if the branch matches a regex pattern
-		for bpattern := range b.conf.Branches {
-			if bpattern[0] == '^' {
-				found, err = regexp.MatchString(bpattern, b.branch)
-				if err != nil {
-					log.Printf("[build] cannot match %s against %s: %s", b.branch, bpattern, err)
-					continue
-				}
-				if found {
-					tmpl = b.conf.Branches[bpattern]
-					break
-				}
-			}
-		}
-		if !found {
-			tmpl = b.conf.Branches["__default__"]
-		}
-	}
+	tmpl := branchStages(b.conf.Branches).match(b.branch, b.conf.Branches["__default__"])
 	b.stage = b.stageVars.applySingle(tmpl)
 	return b.stage
 }
 
 func (b *build) ticket() error {
-	// TODO: Handle all special cases, make them configurable
-	if b.branch == "master" || b.branch == "production" {
+	// If this branch is one of the specially staged ones, nothing to do
+	if branchStages(b.conf.Branches).match(b.branch, "") != "" {
 		return nil
 	}
 	var err error
