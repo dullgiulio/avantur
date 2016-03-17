@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -20,12 +21,17 @@ func (v vars) add(key, val string) {
 	v[fmt.Sprintf("{%s}", key)] = val
 }
 
+func (v vars) applySingle(s string) string {
+	for key, val := range v {
+		s = strings.Replace(s, key, val, -1)
+	}
+	return s
+}
+
 func (v vars) apply(a []string) []string {
 	res := make([]string, len(a))
 	for i := range a {
-		for key, val := range v {
-			res[i] = strings.Replace(a[i], key, val, -1)
-		}
+		res[i] = v.applySingle(a[i])
 	}
 	return res
 }
@@ -52,8 +58,6 @@ func (a buildAct) String() string {
 
 func (a buildAct) command(b *build) *exec.Cmd {
 	var cmd []string
-	vars := makeVars()
-	vars.add("STAGE", b.stage())
 	switch a {
 	case buildActCreate:
 		cmd = b.conf.Commands.CmdCreate
@@ -65,16 +69,18 @@ func (a buildAct) command(b *build) *exec.Cmd {
 	if cmd == nil {
 		return nil
 	}
-	cmd = vars.apply(cmd)
+	cmd = b.stageVars.apply(cmd)
 	return exec.Command(cmd[0], cmd[1:]...)
 }
 
 type build struct {
-	branch   string
-	env      string
-	ticketNo int64
-	conf     *config
-	acts     chan buildAct
+	stage     string
+	branch    string
+	env       string
+	ticketNo  int64
+	conf      *config
+	acts      chan buildAct
+	stageVars vars
 }
 
 func newBuild(env, branch string, conf *config) (*build, error) {
@@ -87,19 +93,47 @@ func newBuild(env, branch string, conf *config) (*build, error) {
 	if err := b.ticket(); err != nil {
 		return nil, err
 	}
+	sv := makeVars()
+	sv.add("ENV", b.env)
+	sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
+	sv.add("BRANCH", b.branch)
+	b.stageVars = sv
+	b.makeStage()
+	b.stageVars.add("STAGE", b.stage)
 	go b.run()
 	return b, nil
 }
 
-// TODO: This logic should be configurable (i.e. a map)
-func (b *build) stage() string {
-	if b.branch == "master" {
-		return fmt.Sprintf("%s.dev", b.env)
+func (b *build) makeStage() string {
+	if b.stage != "" {
+		return b.stage
 	}
-	if b.branch == "production" {
-		return fmt.Sprintf("%s.hotfix", b.env)
+	tmpl, ok := b.conf.Branches[b.branch]
+	if !ok {
+		var (
+			found bool
+			err   error
+		)
+		// Try if the branch matches a regex pattern
+		for bpattern := range b.conf.Branches {
+			if bpattern[0] == '^' {
+				found, err = regexp.MatchString(bpattern, b.branch)
+				if err != nil {
+					log.Printf("[build] cannot match %s against %s: %s", b.branch, bpattern, err)
+					continue
+				}
+				if found {
+					tmpl = b.conf.Branches[bpattern]
+					break
+				}
+			}
+		}
+		if !found {
+			tmpl = b.conf.Branches["__default__"]
+		}
 	}
-	return fmt.Sprintf("%s.typo%d", b.env, b.ticketNo)
+	b.stage = b.stageVars.applySingle(tmpl)
+	return b.stage
 }
 
 func (b *build) ticket() error {
@@ -166,11 +200,11 @@ func makeBuilds(cf *config) builds {
 	for _, env := range cf.Envs {
 		b, err := newBuild(env, "master", cf)
 		if err != nil {
-			log.Printf("[build] cannot add existing build %s: %s", b.stage(), err)
+			log.Printf("[build] cannot add existing build %s: %s", b.stage, err)
 			continue
 		}
-		bs[b.stage()] = b
-		log.Printf("[build] added existing build %s", b.stage())
+		bs[b.stage] = b
+		log.Printf("[build] added existing build %s", b.stage)
 	}
 	return bs
 }
@@ -178,9 +212,8 @@ func makeBuilds(cf *config) builds {
 // A branch has been pushed: create env or deploy to existing
 func (b builds) push(build *build) error {
 	var act buildAct
-	stage := build.stage()
-	if existingBuild, ok := b[stage]; !ok {
-		b[stage] = build
+	if existingBuild, ok := b[build.stage]; !ok {
+		b[build.stage] = build
 		act = buildActCreate
 	} else {
 		act = buildActUpdate
