@@ -119,27 +119,23 @@ func newBuild(env, branch string, conf *config) (*build, error) {
 		conf:   conf,
 		acts:   make(chan buildAct), // TODO: can be buffered
 	}
-	if err := b.ticket(); err != nil {
-		return nil, err
-	}
+	defTmpl := b.conf.Branches["__default__"]
+	tmpl := branchStages(b.conf.Branches).match(branch, defTmpl)
 	sv := makeVars()
 	sv.add("ENV", b.env)
 	sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
 	sv.add("BRANCH", b.branch)
 	b.stageVars = sv
-	b.makeStage()
+	b.stage = b.stageVars.applySingle(tmpl)
 	b.stageVars.add("STAGE", b.stage)
+	// If it is not a special stage, we can get the ticket number
+	if b.stage == defTmpl {
+		if err := b.ticket(); err != nil {
+			return nil, err
+		}
+	}
 	go b.run()
 	return b, nil
-}
-
-func (b *build) makeStage() string {
-	if b.stage != "" {
-		return b.stage
-	}
-	tmpl := branchStages(b.conf.Branches).match(b.branch, b.conf.Branches["__default__"])
-	b.stage = b.stageVars.applySingle(tmpl)
-	return b.stage
 }
 
 func (b *build) ticket() error {
