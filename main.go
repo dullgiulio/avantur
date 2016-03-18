@@ -6,9 +6,6 @@ import (
 )
 
 func main() {
-	// TODO: Detect all existing ticket-based envs and the master (dev) ones.
-	// TODO: Each env has a last commit associated. It is also detected on startup.
-
 	flag.Parse()
 	conffile := flag.Arg(0)
 

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS build_results (
   id int(11) NOT NULL AUTO_INCREMENT,
   start datetime NOT NULL,
   end datetime NOT NULL,
+  act int(11) NOT NULL,
   ticket int(11) NOT NULL,
   exitcode int(11) NOT NULL,
   sha1 char(40) NOT NULL,
@@ -25,7 +26,7 @@ CREATE TABLE IF NOT EXISTS build_results (
 `
 
 const (
-	queryAdd         = `INSERT INTO %s (start,end,ticket,exitcode,sha1,stage,branch,stdout,stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	queryAdd         = `INSERT INTO %s (start,end,act,ticket,exitcode,sha1,stage,branch,stdout,stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	queryDeleteStage = `DELETE FROM %s WHERE stage = ?`
 	// queryGet = TODO
 )
@@ -64,7 +65,7 @@ func (m *Mysql) initStmts() error {
 }
 
 func (m *Mysql) Add(br *BuildResult) error {
-	_, err := m.stmtAdd.Exec(br.Start, br.End, br.Ticket, br.Retval, br.SHA1, br.Stage, br.Branch, br.Stdout, br.Stderr)
+	_, err := m.stmtAdd.Exec(br.Start, br.End, br.Act, br.Ticket, br.Retval, br.SHA1, br.Stage, br.Branch, br.Stdout, br.Stderr)
 	return err
 }
 

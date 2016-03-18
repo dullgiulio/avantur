@@ -36,34 +36,16 @@ func (v vars) apply(a []string) []string {
 	return res
 }
 
-type buildAct int
-
-const (
-	buildActCreate buildAct = iota
-	buildActUpdate
-	buildActDestroy
-)
-
-func (a buildAct) String() string {
-	switch a {
-	case buildActCreate:
-		return "create"
-	case buildActUpdate:
-		return "update"
-	case buildActDestroy:
-		return "destroy"
-	}
-	return "unknown"
-}
-
-func (a buildAct) command(b *build) *exec.Cmd {
+func makeCommand(act store.BuildAct, b *build) *exec.Cmd {
 	var cmd []string
-	switch a {
-	case buildActCreate:
+	switch act {
+	case store.BuildActCreate:
 		cmd = b.conf.Commands.CmdCreate
-	case buildActUpdate:
+	case store.BuildActChange:
+		cmd = b.conf.Commands.CmdChange
+	case store.BuildActUpdate:
 		cmd = b.conf.Commands.CmdUpdate
-	case buildActDestroy:
+	case store.BuildActDestroy:
 		cmd = b.conf.Commands.CmdDestroy
 	}
 	if cmd == nil {
@@ -102,40 +84,47 @@ func (br branchStages) match(branch, def string) string {
 	return def
 }
 
+type buildReq struct {
+	act    store.BuildAct
+	branch string
+}
+
+func newBuildReq(act store.BuildAct, branch string) *buildReq {
+	return &buildReq{act: act, branch: branch}
+}
+
 type build struct {
 	stage     string
 	branch    string
-	env       string
 	sha1      string
 	ticketNo  int64
 	conf      *config
-	acts      chan buildAct
+	acts      chan *buildReq
 	stageVars vars
 }
 
-func newBuild(env, branch, sha1 string, conf *config) (*build, error) {
+func newBuild(n *notif, conf *config) (*build, error) {
 	b := &build{
-		branch: branch,
-		env:    env,
-		sha1:   sha1,
+		branch: n.branch,
+		sha1:   n.sha1,
 		conf:   conf,
-		acts:   make(chan buildAct), // TODO: can be buffered
+		acts:   make(chan *buildReq), // TODO: can be buffered
 	}
 	defTmpl := b.conf.Branches["__default__"]
-	tmpl := branchStages(b.conf.Branches).match(branch, defTmpl)
+	tmpl := branchStages(b.conf.Branches).match(n.branch, defTmpl)
+	// If it is not a special stage, we can get the ticket number
+	if tmpl == defTmpl {
+		if err := b.ticket(); err != nil {
+			return nil, err
+		}
+	}
 	sv := makeVars()
-	sv.add("ENV", b.env)
+	sv.add("ENV", n.env)
 	sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
 	sv.add("BRANCH", b.branch)
 	b.stageVars = sv
 	b.stage = b.stageVars.applySingle(tmpl)
 	b.stageVars.add("STAGE", b.stage)
-	// If it is not a special stage, we can get the ticket number
-	if b.stage == defTmpl {
-		if err := b.ticket(); err != nil {
-			return nil, err
-		}
-	}
 	go b.run()
 	return b, nil
 }
@@ -150,45 +139,47 @@ func (b *build) execResult(cmd *exec.Cmd) (*store.BuildResult, error) {
 	return execResult(cmd, time.Duration(b.conf.CommandTimeout))
 }
 
-func (b *build) execute(act buildAct) {
-	cmd := act.command(b)
-	log.Printf("[build] env %s: branch %s: execute '%s'", b.env, b.branch, strings.Join(cmd.Args, " "))
+func (b *build) execute(req *buildReq) {
+	// On a change request, we might have a different branch
+	if req.act == store.BuildActChange {
+		if b.branch == req.branch {
+			req.act = store.BuildActUpdate
+		} else {
+			b.branch = req.branch
+			b.stageVars.add("BRANCH", b.branch)
+		}
+	}
+	cmd := makeCommand(req.act, b)
+	log.Printf("[build] stage %s: branch %s: execute '%s'", b.stage, b.branch, strings.Join(cmd.Args, " "))
 	br, err := b.execResult(cmd)
 	if err != nil {
 		log.Printf("[build] command execution failed: %s", err)
 		return
 	}
+	br.Act = req.act
 	br.Branch = b.branch
 	br.SHA1 = b.sha1
 	br.Stage = b.stage
 	if err = b.conf.storage.Add(br); err != nil {
 		log.Printf("[build] cannot persist build result: %s", err)
 	}
-	/*
-		// TODO: Only if everythig is okay, we remove all results
-		if act == buildActDestroy {
-			if err = b.conf.storage.Delete(b.stage); err != nil {
-				log.Printf("cannot remove build results for %s: %s", b.env, err)
-			}
-		}
-	*/
 }
 
 func (b *build) run() {
-	for act := range b.acts {
+	for req := range b.acts {
 		// Global builds concurrency semaphore
 		if b.conf.limitBuilds != nil {
 			<-b.conf.limitBuilds
 		}
-		b.execute(act)
+		b.execute(req)
 		if b.conf.limitBuilds != nil {
 			b.conf.limitBuilds <- struct{}{}
 		}
 	}
 }
 
-func (b *build) request(act buildAct) {
-	b.acts <- act
+func (b *build) request(act store.BuildAct, branch string) {
+	b.acts <- newBuildReq(act, branch)
 }
 
 func (b *build) destroy() {
@@ -200,29 +191,37 @@ type builds map[string]*build // stage : build
 func makeBuilds(cf *config) builds {
 	bs := make(map[string]*build)
 	// TODO: Detect and prefill envs automatically from existing dirs
-	for _, env := range cf.Envs {
-		b, err := newBuild(env, "master", "", cf)
-		if err != nil {
-			log.Printf("[build] cannot add existing build %s: %s", b.stage, err)
-			continue
+	for env, branches := range cf.Envs {
+		for _, branch := range branches {
+			b, err := newBuild(newNotif(env, "", branch), cf)
+			if err != nil {
+				log.Printf("[build] cannot add existing build %s: %s", env, err)
+				continue
+			}
+			bs[b.stage] = b
+			log.Printf("[build] added stage %s tracking %s", b.stage, branch)
 		}
-		bs[b.stage] = b
-		log.Printf("[build] added existing build %s", b.stage)
 	}
 	return bs
 }
 
 // A branch has been pushed: create env or deploy to existing
 func (b builds) push(build *build) error {
-	var act buildAct
+	var (
+		act    store.BuildAct
+		branch string
+	)
 	if existingBuild, ok := b[build.stage]; !ok {
 		b[build.stage] = build
-		act = buildActCreate
+		act = store.BuildActCreate
 	} else {
-		act = buildActUpdate
+		// If the branch is the same as last seen, act will be treated as Update
+		act = store.BuildActChange
+		branch = build.branch
+		build.destroy() // Prevent leaking a goroutine
 		build = existingBuild
 	}
-	build.request(act)
+	build.request(act, branch)
 	return nil
 }
 
@@ -232,7 +231,7 @@ func (b builds) merge(stage string) error {
 	if !ok {
 		return fmt.Errorf("unknown stage %s merged", stage)
 	}
-	build.request(buildActDestroy)
+	build.request(store.BuildActDestroy, "")
 	build.destroy()
 	return nil
 }

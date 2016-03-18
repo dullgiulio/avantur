@@ -33,7 +33,7 @@ func (s *server) serveBuilds(cf *config) {
 
 	for n := range s.notifs {
 		log.Printf("[server] env %s: branch %s: handling notification for %s", n.env, n.branch, n.sha1)
-		b, err := newBuild(n.env, n.branch, n.sha1, cf)
+		b, err := newBuild(n, cf)
 		if err != nil {
 			log.Printf("%s: %s", n.branch, err)
 			continue

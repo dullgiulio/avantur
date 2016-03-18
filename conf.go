@@ -31,14 +31,15 @@ func (d *duration) UnmarshalJSON(b []byte) error {
 }
 
 type config struct {
-	BranchRegexp   string   `json:"branch_regexp"`
-	WorkspacesDir  string   `json:"workspaces_dir"`
-	Database       string   `json:"database"`
-	Table          string   `json:"table"`
-	Envs           []string `json:"envs"`
-	LimitBuildsN   int      `json:"limit_builds"`
-	CommandTimeout duration `json:"command_timeout"`
+	BranchRegexp   string              `json:"branch_regexp"`
+	WorkspacesDir  string              `json:"workspaces_dir"`
+	Database       string              `json:"database"`
+	Table          string              `json:"table"`
+	Envs           map[string][]string `json:"envs"`
+	LimitBuildsN   int                 `json:"limit_builds"`
+	CommandTimeout duration            `json:"command_timeout"`
 	Commands       struct {
+		CmdChange  []string `json:"change"`
 		CmdCreate  []string `json:"create"`
 		CmdUpdate  []string `json:"update"`
 		CmdDestroy []string `json:"destroy"`
