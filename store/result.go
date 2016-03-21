@@ -10,6 +10,7 @@ type BuildResult struct {
 	Stderr []byte
 	Retval int
 	Ticket int64
+	Cmd    string
 	Stage  string
 	Branch string
 	SHA1   string

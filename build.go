@@ -85,12 +85,12 @@ func (br branchStages) match(branch, def string) string {
 }
 
 type buildReq struct {
-	act    store.BuildAct
-	branch string
+	act   store.BuildAct
+	notif *notif
 }
 
-func newBuildReq(act store.BuildAct, branch string) *buildReq {
-	return &buildReq{act: act, branch: branch}
+func newBuildReq(act store.BuildAct, n *notif) *buildReq {
+	return &buildReq{act: act, notif: n}
 }
 
 type build struct {
@@ -99,7 +99,7 @@ type build struct {
 	sha1      string
 	ticketNo  int64
 	conf      *config
-	acts      chan *buildReq
+	reqs      chan *buildReq
 	stageVars vars
 }
 
@@ -108,7 +108,7 @@ func newBuild(n *notif, conf *config) (*build, error) {
 		branch: n.branch,
 		sha1:   n.sha1,
 		conf:   conf,
-		acts:   make(chan *buildReq), // TODO: can be buffered
+		reqs:   make(chan *buildReq), // TODO: can be buffered
 	}
 	defTmpl := b.conf.Branches["__default__"]
 	tmpl := branchStages(b.conf.Branches).match(n.branch, defTmpl)
@@ -125,7 +125,6 @@ func newBuild(n *notif, conf *config) (*build, error) {
 	b.stageVars = sv
 	b.stage = b.stageVars.applySingle(tmpl)
 	b.stageVars.add("STAGE", b.stage)
-	go b.run()
 	return b, nil
 }
 
@@ -142,23 +141,25 @@ func (b *build) execResult(cmd *exec.Cmd) (*store.BuildResult, error) {
 func (b *build) execute(req *buildReq) {
 	// On a change request, we might have a different branch
 	if req.act == store.BuildActChange {
-		if b.branch == req.branch {
+		if b.branch == req.notif.branch {
 			req.act = store.BuildActUpdate
 		} else {
-			b.branch = req.branch
+			b.branch = req.notif.branch
 			b.stageVars.add("BRANCH", b.branch)
 		}
 	}
 	cmd := makeCommand(req.act, b)
-	log.Printf("[build] stage %s: branch %s: execute '%s'", b.stage, b.branch, strings.Join(cmd.Args, " "))
+	command := strings.Join(cmd.Args, " ")
+	log.Printf("[build] stage %s: branch %s: execute '%s'", b.stage, b.branch, command)
 	br, err := b.execResult(cmd)
 	if err != nil {
 		log.Printf("[build] command execution failed: %s", err)
 		return
 	}
+	br.Cmd = command
 	br.Act = req.act
 	br.Branch = b.branch
-	br.SHA1 = b.sha1
+	br.SHA1 = req.notif.sha1
 	br.Stage = b.stage
 	if err = b.conf.storage.Add(br); err != nil {
 		log.Printf("[build] cannot persist build result: %s", err)
@@ -166,7 +167,7 @@ func (b *build) execute(req *buildReq) {
 }
 
 func (b *build) run() {
-	for req := range b.acts {
+	for req := range b.reqs {
 		// Global builds concurrency semaphore
 		if b.conf.limitBuilds != nil {
 			<-b.conf.limitBuilds
@@ -178,12 +179,12 @@ func (b *build) run() {
 	}
 }
 
-func (b *build) request(act store.BuildAct, branch string) {
-	b.acts <- newBuildReq(act, branch)
+func (b *build) request(act store.BuildAct, n *notif) {
+	b.reqs <- newBuildReq(act, n)
 }
 
 func (b *build) destroy() {
-	close(b.acts)
+	close(b.reqs)
 }
 
 type builds map[string]*build // stage : build
@@ -199,6 +200,7 @@ func makeBuilds(cf *config) builds {
 				continue
 			}
 			bs[b.stage] = b
+			go b.run()
 			log.Printf("[build] added stage %s tracking %s", b.stage, branch)
 		}
 	}
@@ -206,22 +208,18 @@ func makeBuilds(cf *config) builds {
 }
 
 // A branch has been pushed: create env or deploy to existing
-func (b builds) push(build *build) error {
-	var (
-		act    store.BuildAct
-		branch string
-	)
+func (b builds) push(build *build, n *notif) error {
+	var act store.BuildAct
 	if existingBuild, ok := b[build.stage]; !ok {
 		b[build.stage] = build
 		act = store.BuildActCreate
+		go build.run()
 	} else {
 		// If the branch is the same as last seen, act will be treated as Update
 		act = store.BuildActChange
-		branch = build.branch
-		build.destroy() // Prevent leaking a goroutine
 		build = existingBuild
 	}
-	build.request(act, branch)
+	build.request(act, n)
 	return nil
 }
 
@@ -231,7 +229,7 @@ func (b builds) merge(stage string) error {
 	if !ok {
 		return fmt.Errorf("unknown stage %s merged", stage)
 	}
-	build.request(store.BuildActDestroy, "")
+	build.request(store.BuildActDestroy, nil)
 	build.destroy()
 	return nil
 }

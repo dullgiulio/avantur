@@ -38,6 +38,6 @@ func (s *server) serveBuilds(cf *config) {
 			log.Printf("%s: %s", n.branch, err)
 			continue
 		}
-		builds.push(b)
+		builds.push(b, n)
 	}
 }
