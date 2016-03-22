@@ -45,6 +45,7 @@ type config struct {
 		CmdDestroy []string `json:"destroy"`
 	} `json:"commands"`
 	Branches    map[string]string `json:"branches"`
+	Dirs        map[string]string `json:"dirs"`
 	regexBranch *regexp.Regexp
 	// Limit the number of concurrent builds that can be performed
 	limitBuilds chan struct{}

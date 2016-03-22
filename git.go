@@ -63,7 +63,7 @@ func (g *gitcommits) since(sha1, dir string) error {
 	return g.exec(cmd)
 }
 
-func (g *gitcommits) lastN(n int, dir string) error {
+func (g *gitcommits) last(n int, dir string) error {
 	cmd := exec.Command("git", "log", "--format=%H %P", fmt.Sprintf("-%d", n))
 	cmd.Dir = dir
 	return g.exec(cmd)
