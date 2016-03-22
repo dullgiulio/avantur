@@ -58,6 +58,8 @@ func makeCommand(act store.BuildAct, b *build) *exec.Cmd {
 type branchStages map[string]string
 
 // match returns the stage template for a branch
+// TODO: At some point we will need to return all matching envs.
+// 		 For example hotfix and live both match production.
 func (br branchStages) match(branch, def string) string {
 	tmpl, ok := br[branch]
 	if ok {
