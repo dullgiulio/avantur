@@ -60,11 +60,12 @@ func (b *mergebot) run() {
 		if !req.trigger {
 			continue
 		}
-		dir, ok := b.conf.Dirs[bv.build.stage]
+		envcf, ok := b.conf.Envs[req.notif.env]
 		if !ok {
 			log.Printf("[mergebot] %s: cannot find a directory to run git in", b.name)
 			continue
 		}
+		dir := envcf.Dir
 		if bv.commits == nil {
 			bv.commits = newGitcommits()
 		}

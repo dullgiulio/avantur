@@ -13,7 +13,7 @@ func main() {
 	if err != nil {
 		log.Fatal("configuration file failed to load: ", err)
 	}
-	srv := newServer()
+	srv := newServer(cfg)
 	go srv.serveBuilds(cfg)
 	log.Print("Listening to port 8111")
 	srv.serveHTTP(":8111")

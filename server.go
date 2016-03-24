@@ -23,11 +23,15 @@ type server struct {
 	mergebots mergebots
 }
 
-func newServer() *server {
-	return &server{
+func newServer(cf *config) *server {
+	s := &server{
 		notifs:    make(chan *notif),
 		mergebots: makeMergebots(),
 	}
+	for env := range cf.Envs {
+		s.mergebots.add(env, cf)
+	}
+	return s
 }
 
 func (s *server) serveBuilds(cf *config) {

@@ -94,6 +94,7 @@ func newBuildReq(act store.BuildAct, n *notif) *buildReq {
 }
 
 type build struct {
+	env       string
 	stage     string
 	branch    string
 	sha1      string
@@ -105,8 +106,12 @@ type build struct {
 
 func newBuilds(n *notif, conf *config) ([]*build, error) {
 	var hasTicket bool
-	defTmpl := conf.Branches["__default__"]
-	tmpls := branchStages(conf.Branches).match(n.branch, defTmpl)
+	envcf, ok := conf.Envs[n.env]
+	if !ok {
+		return nil, fmt.Errorf("[build] environment %s not configured", n.env)
+	}
+	defTmpl := envcf.Branches["__default__"]
+	tmpls := branchStages(envcf.Branches).match(n.branch, defTmpl)
 	// If it is not a special stage, we can get the ticket number
 	if tmpls[0] == defTmpl[0] {
 		hasTicket = true
@@ -114,6 +119,7 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 	bs := make([]*build, 0)
 	for _, tmpl := range tmpls {
 		b := &build{
+			env:    n.env,
 			branch: n.branch,
 			sha1:   n.sha1,
 			conf:   conf,
@@ -200,11 +206,11 @@ type builds map[string]*build // stage : build
 func makeBuilds(cf *config) builds {
 	bs := make(map[string]*build)
 	// TODO: Detect and prefill envs automatically from existing dirs
-	for env, branches := range cf.Envs {
-		for _, branch := range branches {
+	for env, envcf := range cf.Envs {
+		for _, branch := range envcf.Statics {
 			builds, err := newBuilds(newNotif(env, "", branch), cf)
 			if err != nil {
-				log.Printf("[build] cannot add existing build %s: %s", env, err)
+				log.Printf("[build] cannot add existing build %s, branch %s: %s", env, branch, err)
 				continue
 			}
 			for _, b := range builds {

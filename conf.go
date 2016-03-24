@@ -31,21 +31,23 @@ func (d *duration) UnmarshalJSON(b []byte) error {
 }
 
 type config struct {
-	BranchRegexp   string              `json:"branch_regexp"`
-	WorkspacesDir  string              `json:"workspaces_dir"`
-	Database       string              `json:"database"`
-	Table          string              `json:"table"`
-	Envs           map[string][]string `json:"envs"`
-	LimitBuildsN   int                 `json:"limit_builds"`
-	CommandTimeout duration            `json:"command_timeout"`
+	BranchRegexp   string   `json:"branch_regexp"`
+	WorkspacesDir  string   `json:"workspaces_dir"`
+	Database       string   `json:"database"`
+	Table          string   `json:"table"`
+	LimitBuildsN   int      `json:"limit_builds"`
+	CommandTimeout duration `json:"command_timeout"`
 	Commands       struct {
 		CmdChange  []string `json:"change"`
 		CmdCreate  []string `json:"create"`
 		CmdUpdate  []string `json:"update"`
 		CmdDestroy []string `json:"destroy"`
 	} `json:"commands"`
-	Branches    map[string][]string `json:"branches"`
-	Dirs        map[string]string   `json:"dirs"`
+	Envs map[string]struct {
+		Branches map[string][]string `json:"branches"`
+		Statics  []string            `json:"staticBranches"`
+		Dir      string              `json:"dir"`
+	} `json:"environments"`
 	regexBranch *regexp.Regexp
 	// Limit the number of concurrent builds that can be performed
 	limitBuilds chan struct{}

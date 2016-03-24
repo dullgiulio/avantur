@@ -1,0 +1,23 @@
+{
+	"branch_regexp": "^(?:[a-zA-Z0-9]+/)?(?:[A-Z0-9]+\\-)?(\\d+)\\-",
+	"database": "USER:PASSWORD@tcp(localhost:3306)/DATABASE",
+	"table": "build_results",
+	"command_timeout": "10m",
+	"commands": {
+		"create": ["deploy-tool", "env:init", "{STAGE}", "-b", "{BRANCH}"],
+		"update": ["deploy-tool" "deploy", "{STAGE}"],
+		"change": ["deploy-tool", "deploy", "{STAGE}", "--branch={BRANCH}"],
+		"destroy": ["deploy-tool", "env:del", "{STAGE}"]
+	},
+	"environments": {
+		"microsites": {
+			"branches": {
+				"master": ["{ENV}.dev", "{ENV}.personal0", "{ENV}.personal1"],
+				"production": ["{ENV}.hotfix"],
+				"^release/": ["{ENV}.uat"],
+				"__default__": ["{ENV}.ticket{TICKET}"]
+			},
+			"dir": "/path/to/git/repo"
+		}
+	}
+}
