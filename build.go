@@ -55,15 +55,13 @@ func makeCommand(act store.BuildAct, b *build) *exec.Cmd {
 	return exec.Command(cmd[0], cmd[1:]...)
 }
 
-type branchStages map[string]string
+type branchStages map[string][]string
 
 // match returns the stage template for a branch
-// TODO: At some point we will need to return all matching envs.
-// 		 For example hotfix and live both match production.
-func (br branchStages) match(branch, def string) string {
-	tmpl, ok := br[branch]
+func (br branchStages) match(branch string, def []string) []string {
+	tmpls, ok := br[branch]
 	if ok {
-		return tmpl
+		return tmpls
 	}
 	var (
 		found bool
@@ -105,29 +103,37 @@ type build struct {
 	stageVars vars
 }
 
-func newBuild(n *notif, conf *config) (*build, error) {
-	b := &build{
-		branch: n.branch,
-		sha1:   n.sha1,
-		conf:   conf,
-		reqs:   make(chan *buildReq), // TODO: can be buffered
-	}
-	defTmpl := b.conf.Branches["__default__"]
-	tmpl := branchStages(b.conf.Branches).match(n.branch, defTmpl)
+func newBuilds(n *notif, conf *config) ([]*build, error) {
+	var hasTicket bool
+	defTmpl := conf.Branches["__default__"]
+	tmpls := branchStages(conf.Branches).match(n.branch, defTmpl)
 	// If it is not a special stage, we can get the ticket number
-	if tmpl == defTmpl {
-		if err := b.ticket(); err != nil {
-			return nil, err
-		}
+	if tmpls[0] == defTmpl[0] {
+		hasTicket = true
 	}
-	sv := makeVars()
-	sv.add("ENV", n.env)
-	sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
-	sv.add("BRANCH", b.branch)
-	b.stageVars = sv
-	b.stage = b.stageVars.applySingle(tmpl)
-	b.stageVars.add("STAGE", b.stage)
-	return b, nil
+	bs := make([]*build, 0)
+	for _, tmpl := range tmpls {
+		b := &build{
+			branch: n.branch,
+			sha1:   n.sha1,
+			conf:   conf,
+			reqs:   make(chan *buildReq), // TODO: can be buffered
+		}
+		if hasTicket {
+			if err := b.ticket(); err != nil {
+				return nil, err
+			}
+		}
+		sv := makeVars()
+		sv.add("ENV", n.env)
+		sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
+		sv.add("BRANCH", b.branch)
+		b.stageVars = sv
+		b.stage = b.stageVars.applySingle(tmpl)
+		b.stageVars.add("STAGE", b.stage)
+		bs = append(bs, b)
+	}
+	return bs, nil
 }
 
 func (b *build) ticket() error {
@@ -196,14 +202,16 @@ func makeBuilds(cf *config) builds {
 	// TODO: Detect and prefill envs automatically from existing dirs
 	for env, branches := range cf.Envs {
 		for _, branch := range branches {
-			b, err := newBuild(newNotif(env, "", branch), cf)
+			builds, err := newBuilds(newNotif(env, "", branch), cf)
 			if err != nil {
 				log.Printf("[build] cannot add existing build %s: %s", env, err)
 				continue
 			}
-			bs[b.stage] = b
-			go b.run()
-			log.Printf("[build] added stage %s tracking %s", b.stage, branch)
+			for _, b := range builds {
+				bs[b.stage] = b
+				go b.run()
+				log.Printf("[build] added stage %s tracking %s", b.stage, branch)
+			}
 		}
 	}
 	return bs

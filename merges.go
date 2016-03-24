@@ -1,15 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"log"
-)
-
-type mergeAct int
-
-const (
-	mergeActAdd mergeAct = iota
-	mergeActScan
 )
 
 type buildver struct {
@@ -19,10 +11,19 @@ type buildver struct {
 }
 
 type mergereq struct {
-	env   string
-	sha1  string
-	build *build
-	act   mergeAct
+	env     string
+	sha1    string
+	trigger bool
+	build   *build
+}
+
+func newMergereq(env, sha1 string, trigger bool, build *build) *mergereq {
+	return &mergereq{
+		env:     env,
+		sha1:    sha1,
+		trigger: trigger,
+		build:   build,
+	}
 }
 
 type mergebot struct {
@@ -43,52 +44,50 @@ func newMergebot(name string, cf *config) *mergebot {
 	return b
 }
 
+func (b *mergebot) send(req *mergereq) {
+	b.reqs <- req
+}
+
 func (b *mergebot) run() {
 	for req := range b.reqs {
-		switch req.act {
-		case mergeActAdd:
-			bv := b.vers[req.env]
-			if bv == nil {
-				bv = &buildver{
-					build: req.build,
-				}
+		bv := b.vers[req.env]
+		if bv == nil {
+			bv = &buildver{
+				build: req.build,
 			}
-			bv.sha1 = req.sha1
-			b.vers[req.env] = bv
-		case mergeActScan:
-			bv := b.vers["dev"] // TODO: Should be in config
-			if bv == nil {
-				log.Printf("[mergebot] %s: there is no dev mergebot running", b.name)
+		}
+		bv.sha1 = req.sha1
+		b.vers[req.env] = bv
+		// If this request is not a trigger, we are done
+		if !req.trigger {
+			continue
+		}
+		dir, ok := b.conf.Dirs[bv.build.stage]
+		if !ok {
+			log.Printf("[mergebot] %s: cannot find a directory to run git in", b.name)
+			continue
+		}
+		if bv.commits == nil {
+			bv.commits = newGitcommits()
+		}
+		if bv.sha1 != "" {
+			if err := bv.commits.since(bv.sha1, dir); err != nil {
+				log.Printf("[mergebot] %s: %s: error running git: %s", b.name, dir, err)
 				continue
 			}
-			// TODO: The stage name comes from the template...
-			dir, ok := b.conf.Dirs[fmt.Sprintf("%s.dev", b.name)]
-			if !ok {
-				log.Printf("[mergebot] %s: cannot find a directory to run git in", b.name)
+		} else {
+			if err := bv.commits.last(20, dir); err != nil {
+				log.Printf("[mergebot] %s: %s: error running git: %s", b.name, dir, err)
 				continue
 			}
-			if bv.commits == nil {
-				bv.commits = newGitcommits()
+		}
+		for stage, bv := range b.vers {
+			// TODO: Should skip dev and probably others
+			if stage == "dev" {
+				continue
 			}
-			if bv.sha1 != "" {
-				if err := bv.commits.since(bv.sha1, dir); err != nil {
-					log.Printf("[mergebot] %s: %s: error running git: %s", b.name, dir, err)
-					continue
-				}
-			} else {
-				if err := bv.commits.last(20, dir); err != nil {
-					log.Printf("[mergebot] %s: %s: error running git: %s", b.name, dir, err)
-					continue
-				}
-			}
-			for stage, bv := range b.vers {
-				// TODO: Should skip dev and probably others
-				if stage == "dev" {
-					continue
-				}
-				if bv.commits.isMerged(githash(bv.sha1)) {
-					log.Printf("[mergebot] can remove env %s.%s, it was merged", b.name, stage)
-				}
+			if bv.commits.isMerged(githash(bv.sha1)) {
+				log.Printf("[mergebot] can remove env %s.%s, it was merged", b.name, stage)
 			}
 		}
 	}
