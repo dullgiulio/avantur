@@ -218,7 +218,7 @@ func makeBuilds(cf *config) builds {
 }
 
 // A branch has been pushed: create env or deploy to existing
-func (b builds) push(build *build, n *notif) error {
+func (b builds) push(build *build, notif *notif, bot *mergebot) error {
 	var act store.BuildAct
 	if existingBuild, ok := b[build.stage]; !ok {
 		b[build.stage] = build
@@ -229,10 +229,13 @@ func (b builds) push(build *build, n *notif) error {
 		act = store.BuildActChange
 		build = existingBuild
 	}
-	build.request(act, n)
+	build.request(act, notif)
+	triggerDelete := build.branch == "master"
+	bot.send(newMergereq(notif, build, triggerDelete))
 	return nil
 }
 
+/*
 // A branch has been merged to master, destory the env
 func (b builds) merge(stage string) error {
 	build, ok := b[stage]
@@ -243,3 +246,4 @@ func (b builds) merge(stage string) error {
 	build.destroy()
 	return nil
 }
+*/

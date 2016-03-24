@@ -19,12 +19,14 @@ func newNotif(env, sha1, branch string) *notif {
 }
 
 type server struct {
-	notifs chan *notif
+	notifs    chan *notif
+	mergebots mergebots
 }
 
 func newServer() *server {
 	return &server{
-		notifs: make(chan *notif),
+		notifs:    make(chan *notif),
+		mergebots: makeMergebots(),
 	}
 }
 
@@ -39,7 +41,12 @@ func (s *server) serveBuilds(cf *config) {
 			continue
 		}
 		for _, b := range bs {
-			builds.push(b, n)
+			bot := s.mergebots.get(n.env)
+			if bot == nil {
+				log.Printf("[server] no mergebot found for %s, skipping build push", n.env)
+				continue
+			}
+			builds.push(b, n, bot)
 		}
 	}
 }

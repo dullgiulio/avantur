@@ -11,17 +11,15 @@ type buildver struct {
 }
 
 type mergereq struct {
-	env     string
-	sha1    string
 	trigger bool
+	notif   *notif
 	build   *build
 }
 
-func newMergereq(env, sha1 string, trigger bool, build *build) *mergereq {
+func newMergereq(notif *notif, build *build, trigger bool) *mergereq {
 	return &mergereq{
-		env:     env,
-		sha1:    sha1,
 		trigger: trigger,
+		notif:   notif,
 		build:   build,
 	}
 }
@@ -50,14 +48,14 @@ func (b *mergebot) send(req *mergereq) {
 
 func (b *mergebot) run() {
 	for req := range b.reqs {
-		bv := b.vers[req.env]
+		bv := b.vers[req.notif.env]
 		if bv == nil {
 			bv = &buildver{
 				build: req.build,
 			}
 		}
-		bv.sha1 = req.sha1
-		b.vers[req.env] = bv
+		bv.sha1 = req.notif.sha1
+		b.vers[req.notif.env] = bv
 		// If this request is not a trigger, we are done
 		if !req.trigger {
 			continue
@@ -91,4 +89,18 @@ func (b *mergebot) run() {
 			}
 		}
 	}
+}
+
+type mergebots map[string]*mergebot // env : mergebot
+
+func makeMergebots() mergebots {
+	return mergebots(make(map[string]*mergebot))
+}
+
+func (m mergebots) get(env string) *mergebot {
+	return m[env]
+}
+
+func (m mergebots) add(env string, cf *config) {
+	m[env] = newMergebot(env, cf)
 }
