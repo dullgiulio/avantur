@@ -10,13 +10,14 @@
 		"destroy": ["deploy-tool", "env:del", "{STAGE}"]
 	},
 	"environments": {
-		"microsites": {
+		"projectNemo": {
 			"branches": {
 				"master": ["{ENV}.dev", "{ENV}.personal0", "{ENV}.personal1"],
 				"production": ["{ENV}.hotfix"],
 				"^release/": ["{ENV}.uat"],
 				"__default__": ["{ENV}.ticket{TICKET}"]
 			},
+			"staticBranches": ["master", "production", "release/007"],
 			"dir": "/path/to/git/repo"
 		}
 	}
