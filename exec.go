@@ -11,6 +11,24 @@ import (
 	"github.com/dullgiulio/avantur/store"
 )
 
+type execError struct {
+	err  error
+	out  []byte
+	eout []byte
+}
+
+func newExecError(err error, out, eout []byte) *execError {
+	return &execError{
+		err:  err,
+		out:  out,
+		eout: eout,
+	}
+}
+
+func (e *execError) Error() string {
+	return fmt.Sprintf("%s\n--OUTPUT--%s--OUTPUT--\n--ERROR--%s\n--ERROR--", e.err, e.out, e.eout)
+}
+
 func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error) {
 	var err error
 	var out, errOut bytes.Buffer
@@ -50,5 +68,8 @@ func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error
 	br.Retval = retval
 	br.Stdout = out.Bytes()
 	br.Stderr = errOut.Bytes()
+	if err != nil {
+		err = newExecError(err, br.Stdout, br.Stderr)
+	}
 	return br, err
 }

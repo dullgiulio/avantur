@@ -15,6 +15,7 @@ func (s *server) jenkinsHandler(w http.ResponseWriter, r *http.Request) {
 
 	branches, ok := url["branches"]
 	if !ok {
+		branches = make([]string, 1)
 		branches[0] = "master"
 	}
 	sha1 := url["sha1"]

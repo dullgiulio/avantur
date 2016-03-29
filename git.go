@@ -5,7 +5,10 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
+
+	"github.com/dullgiulio/avantur/store"
 )
 
 type githash []byte
@@ -38,7 +41,7 @@ type gitcommits struct {
 }
 
 func newGitcommits() *gitcommits {
-	return &gitcommits{commits: make([]gitcommit, 0)}
+	return &gitcommits{}
 }
 
 // isMerged returns true if sha1 has been merged in the g git history
@@ -60,22 +63,48 @@ func (g *gitcommits) isMerged(sha1 githash) bool {
 func (g *gitcommits) since(sha1, dir string) error {
 	cmd := exec.Command("git", "log", "--format=%H %P", fmt.Sprintf("%s..", sha1))
 	cmd.Dir = dir
-	return g.exec(cmd)
+	return g.execCommits(cmd)
 }
 
 func (g *gitcommits) last(n int, dir string) error {
 	cmd := exec.Command("git", "log", "--format=%H %P", fmt.Sprintf("-%d", n))
 	cmd.Dir = dir
-	return g.exec(cmd)
+	return g.execCommits(cmd)
 }
 
-func (g *gitcommits) exec(cmd *exec.Cmd) error {
+func (g *gitcommits) branch(dir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = dir
+	return g.execBranch(cmd)
+}
+
+func (g *gitcommits) exec(cmd *exec.Cmd) (*store.BuildResult, error) {
 	br, err := execResult(cmd, 2*time.Second)
 	if err != nil {
-		return fmt.Errorf("error executing git command: %s", err)
+		return nil, fmt.Errorf("exec error: %s: %s: %s", cmd.Dir, strings.Join(cmd.Args, " "), err)
 	}
-	commits := make([]gitcommit, 0)
-	sc := bufio.NewScanner(bytes.NewReader(br.Stdout))
+	return br, nil
+}
+
+func (g *gitcommits) execCommits(cmd *exec.Cmd) error {
+	br, err := g.exec(cmd)
+	if err != nil {
+		return fmt.Errorf("git error: %s: %s", err, br.Stderr)
+	}
+	return g.scanCommits(br.Stdout)
+}
+
+func (g *gitcommits) execBranch(cmd *exec.Cmd) (string, error) {
+	br, err := g.exec(cmd)
+	if err != nil {
+		return "", fmt.Errorf("git error: %s: %s", err, br.Stderr)
+	}
+	return strings.TrimSpace(string(br.Stdout)), nil
+}
+
+func (g *gitcommits) scanCommits(output []byte) error {
+	g.commits = make([]gitcommit, 0)
+	sc := bufio.NewScanner(bytes.NewReader(output))
 	for sc.Scan() {
 		hashes := bytes.Split(sc.Bytes(), []byte(" "))
 		ghashes := make([]githash, 0)
@@ -84,7 +113,7 @@ func (g *gitcommits) exec(cmd *exec.Cmd) error {
 				ghashes = append(ghashes, githash(hashes[i]))
 			}
 		}
-		commits = append(commits, makeGitcommit(ghashes...))
+		g.commits = append(g.commits, makeGitcommit(ghashes...))
 	}
 	if err := sc.Err(); err != nil {
 		return err

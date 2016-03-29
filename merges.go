@@ -71,12 +71,12 @@ func (b *mergebot) run() {
 		}
 		if bv.sha1 != "" {
 			if err := bv.commits.since(bv.sha1, dir); err != nil {
-				log.Printf("[mergebot] %s: %s: error running git: %s", b.name, dir, err)
+				log.Printf("[mergebot] %s: %s: can't fetch commits since %s: %s", b.name, dir, bv.sha1, err)
 				continue
 			}
 		} else {
 			if err := bv.commits.last(20, dir); err != nil {
-				log.Printf("[mergebot] %s: %s: error running git: %s", b.name, dir, err)
+				log.Printf("[mergebot] %s: %s: can't fetch last 20 commits: %s", b.name, dir, err)
 				continue
 			}
 		}

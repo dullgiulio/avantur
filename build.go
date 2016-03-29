@@ -207,8 +207,19 @@ func makeBuilds(cf *config) builds {
 	bs := make(map[string]*build)
 	// TODO: Detect and prefill envs automatically from existing dirs
 	for env, envcf := range cf.Envs {
+		var sha1 string
+		git := newGitcommits()
+		if err := git.last(1, envcf.Dir); err == nil {
+			sha1 = string(git.commits[0].hash)
+		} else {
+			log.Printf("[build] cannot determine last commit: %s", err)
+		}
 		for _, branch := range envcf.Statics {
-			builds, err := newBuilds(newNotif(env, "", branch), cf)
+			var lastCommit string
+			if branch == "master" {
+				lastCommit = sha1
+			}
+			builds, err := newBuilds(newNotif(env, lastCommit, branch), cf)
 			if err != nil {
 				log.Printf("[build] cannot add existing build %s, branch %s: %s", env, branch, err)
 				continue
