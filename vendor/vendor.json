@@ -1,0 +1,25 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "AzOt34C4RJ42Vak7A+iME7luE6c=",
+			"path": "github.com/go-sql-driver/mysql",
+			"revision": "66312f7fe2678aa0f5ec770f96702f4c4ec5aa8e",
+			"revisionTime": "2016-03-10T23:28:42+01:00"
+		},
+		{
+			"checksumSHA1": "iIUYZyoanCQQTUaWsu8b+iOSPt4=",
+			"path": "github.com/gorilla/context",
+			"revision": "1ea25387ff6f684839d82767c1733ff4d4d15d0a",
+			"revisionTime": "2016-02-26T13:46:23-08:00"
+		},
+		{
+			"checksumSHA1": "9savgTOzXpR06MLoj5F+E/rEICY=",
+			"path": "github.com/gorilla/mux",
+			"revision": "c9e326e2bdec29039a3761c07bece13133863e1e",
+			"revisionTime": "2016-02-28T19:40:56-08:00"
+		}
+	],
+	"rootPath": "github.com/dullgiulio/avantur"
+}
