@@ -89,7 +89,7 @@ func (g *gitcommits) exec(cmd *exec.Cmd) (*store.BuildResult, error) {
 func (g *gitcommits) execCommits(cmd *exec.Cmd) error {
 	br, err := g.exec(cmd)
 	if err != nil {
-		return fmt.Errorf("git error: %s: %s", err, br.Stderr)
+		return fmt.Errorf("git error: %s", err)
 	}
 	return g.scanCommits(br.Stdout)
 }
@@ -97,7 +97,7 @@ func (g *gitcommits) execCommits(cmd *exec.Cmd) error {
 func (g *gitcommits) execBranch(cmd *exec.Cmd) (string, error) {
 	br, err := g.exec(cmd)
 	if err != nil {
-		return "", fmt.Errorf("git error: %s: %s", err, br.Stderr)
+		return "", fmt.Errorf("git error: %s", err)
 	}
 	return strings.TrimSpace(string(br.Stdout)), nil
 }

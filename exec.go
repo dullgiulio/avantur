@@ -26,7 +26,7 @@ func newExecError(err error, out, eout []byte) *execError {
 }
 
 func (e *execError) Error() string {
-	return fmt.Sprintf("%s\n--OUTPUT--%s--OUTPUT--\n--ERROR--%s\n--ERROR--", e.err, e.out, e.eout)
+	return fmt.Sprintf("%s\n--OUTPUT--\n%s--OUTPUT--\n--ERROR--\n%s\n--ERROR--", e.err, e.out, e.eout)
 }
 
 func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error) {
