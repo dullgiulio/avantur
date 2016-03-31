@@ -94,7 +94,7 @@ func newBuildReq(act store.BuildAct, n *notif) *buildReq {
 }
 
 type build struct {
-	env       string
+	project   string
 	stage     string
 	branch    string
 	sha1      string
@@ -106,12 +106,12 @@ type build struct {
 
 func newBuilds(n *notif, conf *config) ([]*build, error) {
 	var hasTicket bool
-	envcf, ok := conf.Envs[n.env]
+	procf, ok := conf.Envs[n.project]
 	if !ok {
-		return nil, fmt.Errorf("[build] environment %s not configured", n.env)
+		return nil, fmt.Errorf("[build] project %s not configured", n.project)
 	}
-	defTmpl := envcf.Branches["__default__"]
-	tmpls := branchStages(envcf.Branches).match(n.branch, defTmpl)
+	defTmpl := procf.Branches["__default__"]
+	tmpls := branchStages(procf.Branches).match(n.branch, defTmpl)
 	// If it is not a special stage, we can get the ticket number
 	if tmpls[0] == defTmpl[0] {
 		hasTicket = true
@@ -119,11 +119,11 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 	bs := make([]*build, 0)
 	for _, tmpl := range tmpls {
 		b := &build{
-			env:    n.env,
-			branch: n.branch,
-			sha1:   n.sha1,
-			conf:   conf,
-			reqs:   make(chan *buildReq), // TODO: can be buffered
+			project: n.project,
+			branch:  n.branch,
+			sha1:    n.sha1,
+			conf:    conf,
+			reqs:    make(chan *buildReq), // TODO: can be buffered
 		}
 		if hasTicket {
 			if err := b.ticket(); err != nil {
@@ -131,7 +131,7 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 			}
 		}
 		sv := makeVars()
-		sv.add("ENV", n.env)
+		sv.add("ENV", n.project)
 		sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
 		sv.add("BRANCH", b.branch)
 		b.stageVars = sv
@@ -201,44 +201,46 @@ func (b *build) destroy() {
 	close(b.reqs)
 }
 
-type builds map[string]*build // stage : build
+type projects map[string]*build // stage : build
 
-func makeBuilds(cf *config) builds {
-	bs := make(map[string]*build)
+func makeProjects(cf *config, mbs mergebots) projects {
+	pjs := make(map[string]*build)
 	// TODO: Detect and prefill envs automatically from existing dirs
-	for env, envcf := range cf.Envs {
+	for proname, procf := range cf.Envs {
 		var sha1 string
 		git := newGitcommits()
-		if err := git.last(1, envcf.Dir); err == nil {
+		if err := git.last(1, procf.Dir); err == nil {
 			sha1 = string(git.commits[0].hash)
 		} else {
 			log.Printf("[build] cannot determine last commit: %s", err)
 		}
-		for _, branch := range envcf.Statics {
-			var lastCommit string
-			if branch == "master" {
-				lastCommit = sha1
-			}
-			builds, err := newBuilds(newNotif(env, lastCommit, branch), cf)
+		for _, branch := range procf.Statics {
+			notifyMerge := branch == "master"
+			notif := newNotif(proname, sha1, branch)
+			builds, err := newBuilds(notif, cf)
 			if err != nil {
-				log.Printf("[build] cannot add existing build %s, branch %s: %s", env, branch, err)
+				log.Printf("[build] cannot add existing build %s, branch %s: %s", proname, branch, err)
 				continue
 			}
 			for _, b := range builds {
-				bs[b.stage] = b
+				pjs[b.stage] = b
 				go b.run()
 				log.Printf("[build] added stage %s tracking %s", b.stage, branch)
+				if notifyMerge {
+					mbs[proname].send(newMergereq(notif, b))
+					notifyMerge = false
+				}
 			}
 		}
 	}
-	return bs
+	return pjs
 }
 
 // A branch has been pushed: create env or deploy to existing
-func (b builds) push(build *build, notif *notif, bot *mergebot) error {
+func (p projects) push(build *build, notif *notif, bot *mergebot) error {
 	var act store.BuildAct
-	if existingBuild, ok := b[build.stage]; !ok {
-		b[build.stage] = build
+	if existingBuild, ok := p[build.stage]; !ok {
+		p[build.stage] = build
 		act = store.BuildActCreate
 		go build.run()
 	} else {
@@ -247,14 +249,13 @@ func (b builds) push(build *build, notif *notif, bot *mergebot) error {
 		build = existingBuild
 	}
 	build.request(act, notif)
-	triggerDelete := build.branch == "master"
-	bot.send(newMergereq(notif, build, triggerDelete))
+	bot.send(newMergereq(notif, build))
 	return nil
 }
 
 /*
 // A branch has been merged to master, destory the env
-func (b builds) merge(stage string) error {
+func (p projects) merge(stage string) error {
 	build, ok := b[stage]
 	if !ok {
 		return fmt.Errorf("unknown stage %s merged", stage)

@@ -5,16 +5,16 @@ import (
 )
 
 type notif struct {
-	env    string
-	sha1   string
-	branch string
+	project string
+	sha1    string
+	branch  string
 }
 
-func newNotif(env, sha1, branch string) *notif {
+func newNotif(project, sha1, branch string) *notif {
 	return &notif{
-		env:    env,
-		sha1:   sha1,
-		branch: branch,
+		project: project,
+		sha1:    sha1,
+		branch:  branch,
 	}
 }
 
@@ -28,29 +28,29 @@ func newServer(cf *config) *server {
 		notifs:    make(chan *notif),
 		mergebots: makeMergebots(),
 	}
-	for env := range cf.Envs {
-		s.mergebots.add(env, cf)
+	for project := range cf.Envs {
+		s.mergebots.add(project, cf)
 	}
 	return s
 }
 
 func (s *server) serveBuilds(cf *config) {
-	builds := makeBuilds(cf)
+	prods := makeProjects(cf, s.mergebots)
 
 	for n := range s.notifs {
-		log.Printf("[server] env %s: branch %s: handling notification for %s", n.env, n.branch, n.sha1)
+		log.Printf("[server] project %s: branch %s: handling notification for %s", n.project, n.branch, n.sha1)
 		bs, err := newBuilds(n, cf)
 		if err != nil {
 			log.Printf("%s: %s", n.branch, err)
 			continue
 		}
 		for _, b := range bs {
-			bot := s.mergebots.get(n.env)
+			bot := s.mergebots.get(n.project)
 			if bot == nil {
-				log.Printf("[server] no mergebot found for %s, skipping build push", n.env)
+				log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
 				continue
 			}
-			builds.push(b, n, bot)
+			prods.push(b, n, bot)
 		}
 	}
 }
