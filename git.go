@@ -44,6 +44,10 @@ func newGitcommits() *gitcommits {
 	return &gitcommits{}
 }
 
+func (g *gitcommits) String() string {
+	return fmt.Sprintf("%v", g.commits)
+}
+
 // isMerged returns true if sha1 has been merged in the g git history
 func (g *gitcommits) isMerged(sha1 githash) bool {
 	for i := range g.commits {

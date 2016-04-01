@@ -73,18 +73,22 @@ func (b *mergebot) run() {
 					log.Printf("[mergebot] %s: %s: can't fetch commits since %s: %s", b.project, b.master.dir, bv.sha1, err)
 					continue
 				}
+				log.Printf("[mergebot] %s: got commits since %s from master", bv.sha1)
 			} else {
 				if err := commits.last(20, b.master.dir); err != nil {
 					log.Printf("[mergebot] %s: %s: can't fetch last 20 commits: %s", b.project, b.master.dir, err)
 					continue
 				}
+				log.Printf("[mergebot] %s: got last 20 commits from master", b.project)
 			}
 			for _, bv := range b.vers {
 				if commits.isMerged(githash(bv.sha1)) {
-					// XXX: Prints: can remove env microsites.microsites, it was merged
-					log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, req.build.stage)
+					log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
+				} else {
+					log.Printf("[mergebot] %s: %s not found in %s", bv.build.stage, bv.sha1, commits)
 				}
 			}
+			log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, bv.build.stage)
 			bv.sha1 = req.notif.sha1
 		} else {
 			// normally update some tracked version
