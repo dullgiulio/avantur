@@ -35,7 +35,11 @@ func newServer(cf *config) *server {
 }
 
 func (s *server) serveBuilds(cf *config) {
-	prods := makeProjects(cf, s.mergebots)
+	projects := newProjects(cf, s.mergebots)
+	for project := range cf.Envs {
+		bot := s.mergebots.get(project)
+		go bot.run(projects)
+	}
 
 	for n := range s.notifs {
 		log.Printf("[server] project %s: branch %s: handling notification for %s", n.project, n.branch, n.sha1)
@@ -50,7 +54,7 @@ func (s *server) serveBuilds(cf *config) {
 				log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
 				continue
 			}
-			prods.push(b, n, bot)
+			projects.push(b, n, bot)
 		}
 	}
 }
