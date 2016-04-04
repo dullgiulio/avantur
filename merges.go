@@ -45,7 +45,10 @@ func newMergebot(project string, cf *config) *mergebot {
 
 func (b *mergebot) initMaster(notif *notif, build *build) {
 	b.master.stage = build.stage
-	b.master.ver = &buildver{build: build}
+	b.master.ver = &buildver{
+		sha1:  notif.sha1,
+		build: build,
+	}
 	cf, ok := b.conf.Envs[b.project]
 	if !ok {
 		log.Printf("[mergebot] %s: cannot find a directory to run git in", b.project)
@@ -82,20 +85,16 @@ func (b *mergebot) run(projects *projects) {
 				log.Printf("[mergebot] %s: %s: can't fetch commits since %s: %s", b.project, b.master.dir, bv.sha1, err)
 				continue
 			}
-			log.Printf("[mergebot] %s: got commits since %s from master", bv.sha1)
 		} else {
 			if err := commits.last(20, b.master.dir); err != nil {
 				log.Printf("[mergebot] %s: %s: can't fetch last 20 commits: %s", b.project, b.master.dir, err)
 				continue
 			}
-			log.Printf("[mergebot] %s: got last 20 commits from master", b.project)
 		}
 		for _, bv := range b.vers {
 			if commits.isMerged(githash(bv.sha1)) {
 				log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
-				projects.merge(bv.build, req.notif)
-			} else {
-				log.Printf("[mergebot] %s: %s not found in %s", bv.build.stage, bv.sha1, commits)
+				projects.merge(bv.build, req.notif, b)
 			}
 		}
 		log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, bv.build.stage)

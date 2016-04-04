@@ -21,8 +21,9 @@ type projectsReq struct {
 	bot   *mergebot
 }
 
-func newProjectsReq(b *build, n *notif, bot *mergebot) *projectsReq {
+func newProjectsReq(act projectsAct, b *build, n *notif, bot *mergebot) *projectsReq {
 	return &projectsReq{
+		act:   act,
 		build: b,
 		notif: n,
 		bot:   bot,
@@ -88,11 +89,11 @@ func (p *projects) run() {
 }
 
 func (p *projects) push(b *build, n *notif, bot *mergebot) {
-	p.reqs <- newProjectsReq(b, n, bot)
+	p.reqs <- newProjectsReq(projectsActPush, b, n, bot)
 }
 
-func (p *projects) merge(b *build, n *notif) {
-	p.reqs <- newProjectsReq(b, n, nil)
+func (p *projects) merge(b *build, n *notif, bot *mergebot) {
+	p.reqs <- newProjectsReq(projectsActMerge, b, n, bot)
 }
 
 // A branch has been pushed: create env or deploy to existing
@@ -119,7 +120,7 @@ func (p *projects) doMerge(req *projectsReq) error {
 	if !ok {
 		return fmt.Errorf("unknown stage %s merged", stage)
 	}
-	build.request(store.BuildActDestroy, nil)
+	build.request(store.BuildActDestroy, req.notif)
 	build.destroy()
 	delete(p.stages, stage)
 	return nil
