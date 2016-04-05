@@ -6,6 +6,7 @@ import (
 )
 
 func main() {
+	listen := flag.String("listen", ":8111", "Listen to `[ADDR]:PORT`")
 	flag.Parse()
 	conffile := flag.Arg(0)
 
@@ -15,6 +16,6 @@ func main() {
 	}
 	srv := newServer(cfg)
 	go srv.serveBuilds(cfg)
-	log.Print("Listening to port 8111")
-	srv.serveHTTP(":8112")
+	log.Printf("Listening to port %s", *listen)
+	srv.serveHTTP(*listen)
 }
