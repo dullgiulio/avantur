@@ -92,7 +92,7 @@ func (b *mergebot) run(projects *projects) {
 			}
 		}
 		for _, bv := range b.vers {
-			if commits.isMerged(githash(bv.sha1)) {
+			if commits.contains(githash(bv.sha1)) {
 				log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
 				projects.merge(bv.build, req.notif, b)
 			}

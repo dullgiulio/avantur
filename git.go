@@ -48,17 +48,11 @@ func (g *gitcommits) String() string {
 	return fmt.Sprintf("%v", g.commits)
 }
 
-// isMerged returns true if sha1 has been merged in the g git history
-func (g *gitcommits) isMerged(sha1 githash) bool {
+// contains returns true if sha1 has been found in the history
+func (g *gitcommits) contains(sha1 githash) bool {
 	for i := range g.commits {
-		// Skip non-merge commits
-		if len(g.commits[i].parents) == 1 {
-			continue
-		}
-		for j := range g.commits[i].parents {
-			if g.commits[i].parents[j].equal(sha1) {
-				return true
-			}
+		if g.commits[i].hash.equal(sha1) {
+			return true
 		}
 	}
 	return false
