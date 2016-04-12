@@ -85,12 +85,25 @@ func (br branchStages) match(branch string, def []string) []string {
 }
 
 type buildReq struct {
-	act   store.BuildAct
-	notif *notif
+	act    store.BuildAct
+	notif  *notif
+	doneCh chan struct{}
 }
 
 func newBuildReq(act store.BuildAct, n *notif) *buildReq {
-	return &buildReq{act: act, notif: n}
+	return &buildReq{
+		act:    act,
+		notif:  n,
+		doneCh: make(chan struct{}),
+	}
+}
+
+func (r *buildReq) done() {
+	close(r.doneCh)
+}
+
+func (r *buildReq) wait() {
+	<-r.doneCh
 }
 
 type build struct {
@@ -164,7 +177,7 @@ func (b *build) execute(req *buildReq) {
 	}
 	cmd := makeCommand(req.act, b)
 	command := strings.Join(cmd.Args, " ")
-	log.Printf("[build] stage %s: branch %s: execute '%s'", b.stage, b.branch, command)
+	log.Printf("[build] stage %s: branch %s: execute '%s': started", b.stage, b.branch, command)
 	br, err := b.execResult(cmd)
 	if err != nil {
 		log.Printf("[build] command execution failed: %s", err)
@@ -178,6 +191,7 @@ func (b *build) execute(req *buildReq) {
 	if err = b.conf.storage.Add(br); err != nil {
 		log.Printf("[build] cannot persist build result: %s", err)
 	}
+	log.Printf("[build] stage %s: branch %s: execute '%s': done", b.stage, b.branch, command)
 }
 
 func (b *build) run() {
@@ -187,6 +201,7 @@ func (b *build) run() {
 			<-b.conf.limitBuilds
 		}
 		b.execute(req)
+		req.done()
 		if b.conf.limitBuilds != nil {
 			b.conf.limitBuilds <- struct{}{}
 		}
@@ -195,7 +210,9 @@ func (b *build) run() {
 }
 
 func (b *build) request(act store.BuildAct, n *notif) {
-	b.reqs <- newBuildReq(act, n)
+	br := newBuildReq(act, n)
+	b.reqs <- br
+	br.wait()
 }
 
 func (b *build) destroy() {

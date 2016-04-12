@@ -45,7 +45,7 @@ func newGitcommits() *gitcommits {
 }
 
 func (g *gitcommits) String() string {
-	return fmt.Sprintf("%v", g.commits)
+	return fmt.Sprintf("%s", g.commits)
 }
 
 // contains returns true if sha1 has been found in the history
