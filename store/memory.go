@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"sync"
+	"time"
 )
 
 var errNotFound = errors.New("not found")
@@ -44,5 +45,21 @@ func (b *Memory) Delete(stage string) error {
 	defer b.mux.Unlock()
 
 	delete(b.data, stage)
+	return nil
+}
+
+func (b *Memory) Clean(until time.Time) error {
+	b.mux.Lock()
+	defer b.mux.Unlock()
+
+	for key := range b.data {
+		for i := 0; i < len(b.data[key]); i++ {
+			if b.data[key][i].End.Before(until) {
+				b.data[key] = append(b.data[key][:i], b.data[key][i+1:]...)
+				i--
+			}
+		}
+	}
+
 	return nil
 }

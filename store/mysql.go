@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS build_results (
 const (
 	queryAdd         = `INSERT INTO %s (start,end,act,ticket,exitcode,sha1,stage,cmd,branch,stdout,stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	queryDeleteStage = `DELETE FROM %s WHERE stage = ?`
+	queryDeleteClean = `DELETE FROM %s WHERE end < ?`
 	// queryGet = TODO
 )
 
@@ -37,6 +39,7 @@ type Mysql struct {
 	tableName    string
 	stmtAdd      *sql.Stmt
 	stmtDelStage *sql.Stmt
+	stmtDelClean *sql.Stmt
 }
 
 func NewMysql(dsn, tableName string) (*Mysql, error) {
@@ -62,6 +65,9 @@ func (m *Mysql) initStmts() error {
 	if m.stmtDelStage, err = m.db.Prepare(fmt.Sprintf(queryDeleteStage, m.tableName)); err != nil {
 		return fmt.Errorf("cannot prepare delete by stage statement: %s", err)
 	}
+	if m.stmtDelClean, err = m.db.Prepare(fmt.Sprintf(queryDeleteClean, m.tableName)); err != nil {
+		return fmt.Errorf("cannot prepare delete by date statement: %s", err)
+	}
 	return nil
 }
 
@@ -78,5 +84,10 @@ func (m *Mysql) Get(stage string) ([]*BuildResult, error) {
 
 func (m *Mysql) Delete(stage string) error {
 	_, err := m.stmtDelStage.Exec(stage)
+	return err
+}
+
+func (m *Mysql) Clean(until time.Time) error {
+	_, err := m.stmtDelClean.Exec(until)
 	return err
 }

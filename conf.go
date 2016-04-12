@@ -31,13 +31,14 @@ func (d *duration) UnmarshalJSON(b []byte) error {
 }
 
 type config struct {
-	BranchRegexp   string   `json:"branch_regexp"`
-	WorkspacesDir  string   `json:"workspaces_dir"`
-	Database       string   `json:"database"`
-	Table          string   `json:"table"`
-	LimitBuildsN   int      `json:"limit_builds"`
-	CommandTimeout duration `json:"command_timeout"`
-	Commands       struct {
+	BranchRegexp    string   `json:"branch_regexp"`
+	WorkspacesDir   string   `json:"workspaces_dir"`
+	Database        string   `json:"database"`
+	Table           string   `json:"table"`
+	LimitBuildsN    int      `json:"limit_builds"`
+	ResultsDuration duration `json:"results_duration"`
+	CommandTimeout  duration `json:"command_timeout"`
+	Commands        struct {
 		CmdChange  []string `json:"change"`
 		CmdCreate  []string `json:"create"`
 		CmdUpdate  []string `json:"update"`
@@ -79,7 +80,22 @@ func newConfig(fname string) (*config, error) {
 		log.Printf("[info] no database configured, using memory storage")
 		c.storage = store.NewMemory()
 	}
+	if c.ResultsDuration > 0 {
+		go c.cleaner()
+	}
 	return &c, nil
+}
+
+func (c *config) cleaner() {
+	d := time.Duration(c.ResultsDuration)
+	for {
+		before := time.Now().Add(-d)
+		log.Printf("[server] results cleaner: cleaning jobs before %s", before)
+		if err := c.storage.Clean(before); err != nil {
+			log.Printf("[error] results cleaner: %s", err)
+		}
+		time.Sleep(d)
+	}
 }
 
 func (c *config) parseTicketNo(branch string) (int64, error) {

@@ -20,6 +20,7 @@ type Store interface {
 	Add(br *BuildResult) error
 	Get(stage string) ([]*BuildResult, error)
 	Delete(stage string) error
+	Clean(until time.Time) error
 }
 
 type BuildAct int
