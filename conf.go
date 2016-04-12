@@ -90,7 +90,7 @@ func (c *config) cleaner() {
 	d := time.Duration(c.ResultsDuration)
 	for {
 		before := time.Now().Add(-d)
-		log.Printf("[server] results cleaner: cleaning jobs before %s", before)
+		log.Printf("[server] results cleaner: cleaning jobs before %s", before.Format("2006-02-01 15:04:05"))
 		if err := c.storage.Clean(before); err != nil {
 			log.Printf("[error] results cleaner: %s", err)
 		}
