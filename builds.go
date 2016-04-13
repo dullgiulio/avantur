@@ -201,10 +201,10 @@ func (b *build) run() {
 			<-b.conf.limitBuilds
 		}
 		b.execute(req)
-		req.done()
 		if b.conf.limitBuilds != nil {
 			b.conf.limitBuilds <- struct{}{}
 		}
+		req.done()
 	}
 	log.Printf("[build] %s: terminated", b.stage)
 }
