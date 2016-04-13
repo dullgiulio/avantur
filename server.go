@@ -48,12 +48,12 @@ func (s *server) serveBuilds(cf *config) {
 			log.Printf("%s: %s", n.branch, err)
 			continue
 		}
+		bot := s.mergebots.get(n.project)
+		if bot == nil {
+			log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
+			continue
+		}
 		for _, b := range bs {
-			bot := s.mergebots.get(n.project)
-			if bot == nil {
-				log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
-				continue
-			}
 			projects.push(b, n, bot)
 		}
 	}
