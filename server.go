@@ -45,7 +45,7 @@ func (s *server) serveBuilds(cf *config) {
 		log.Printf("[server] project %s: branch %s: handling notification for %s", n.project, n.branch, n.sha1)
 		bs, err := newBuilds(n, cf)
 		if err != nil {
-			log.Printf("%s: %s", n.branch, err)
+			log.Printf("[server] project %s: branch %s: no builds created: %s", n.project, n.branch, err)
 			continue
 		}
 		bot := s.mergebots.get(n.project)

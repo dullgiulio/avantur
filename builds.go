@@ -118,7 +118,6 @@ type build struct {
 }
 
 func newBuilds(n *notif, conf *config) ([]*build, error) {
-	var hasTicket bool
 	procf, ok := conf.Envs[n.project]
 	if !ok {
 		return nil, fmt.Errorf("[build] project %s not configured", n.project)
@@ -126,22 +125,25 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 	defTmpl := procf.Branches["__default__"]
 	tmpls := branchStages(procf.Branches).match(n.branch, defTmpl)
 	// If it is not a special stage, we can get the ticket number
+	var (
+		ticketNo int64
+		err      error
+	)
 	if tmpls[0] == defTmpl[0] {
-		hasTicket = true
+		ticketNo, err = conf.parseTicketNo(n.branch)
+		if err != nil {
+			return nil, err
+		}
 	}
 	bs := make([]*build, 0)
 	for _, tmpl := range tmpls {
 		b := &build{
-			project: n.project,
-			branch:  n.branch,
-			sha1:    n.sha1,
-			conf:    conf,
-			reqs:    make(chan *buildReq), // TODO: can be buffered
-		}
-		if hasTicket {
-			if err := b.ticket(); err != nil {
-				return nil, err
-			}
+			project:  n.project,
+			branch:   n.branch,
+			sha1:     n.sha1,
+			conf:     conf,
+			ticketNo: ticketNo,
+			reqs:     make(chan *buildReq), // TODO: can be buffered
 		}
 		sv := makeVars()
 		sv.add("ENV", n.project)
