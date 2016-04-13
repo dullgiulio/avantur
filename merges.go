@@ -43,18 +43,20 @@ func newMergebot(project string, cf *config) *mergebot {
 	return b
 }
 
-func (b *mergebot) initMaster(notif *notif, build *build) {
+func (b *mergebot) initMaster(dir string, notif *notif, build *build) {
 	b.master.stage = build.stage
 	b.master.ver = &buildver{
 		sha1:  notif.sha1,
 		build: build,
 	}
-	cf, ok := b.conf.Envs[b.project]
-	if !ok {
-		log.Printf("[mergebot] %s: cannot find a directory to run git in", b.project)
-		return
-	}
-	b.master.dir = cf.Dir
+	/*
+		cf, ok := b.conf.Envs[b.project]
+		if !ok {
+			log.Printf("[mergebot] %s: cannot find a directory to run git in", b.project)
+			return
+		}
+	*/
+	b.master.dir = dir
 	log.Printf("[mergebot] %s: init master to %s using stage %s", b.project, notif.sha1, build.stage)
 }
 

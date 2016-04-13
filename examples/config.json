@@ -19,7 +19,10 @@
 				"__default__": ["{ENV}.ticket{TICKET}"]
 			},
 			"staticBranches": ["master", "production", "release/007"],
-			"dir": "/path/to/git/repo"
+			"merges": {
+				"master": "/path/to/git/repo/with/master/checked/out",
+				"production": "/same/but/for/production"
+			}
 		}
 	}
 }

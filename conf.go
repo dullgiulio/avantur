@@ -47,7 +47,7 @@ type config struct {
 	Envs map[string]struct {
 		Branches map[string][]string `json:"branches"`
 		Statics  []string            `json:"staticBranches"`
-		Dir      string              `json:"dir"`
+		Merges   map[string]string   `json:"merges"` // branch : dir
 	} `json:"environments"`
 	regexBranch *regexp.Regexp
 	// Limit the number of concurrent builds that can be performed

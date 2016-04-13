@@ -40,19 +40,32 @@ func newProjects(cf *config, bots mergebots) *projects {
 		stages: make(map[string]*build),
 		reqs:   make(chan *projectsReq),
 	}
-	// TODO: Detect and prefill envs automatically from existing dirs
 	for proname, procf := range cf.Envs {
-		var sha1 string
-		git := newGitcommits()
-		if err := git.last(1, procf.Dir); err == nil {
-			sha1 = string(git.commits[0].hash)
-		} else {
-			log.Printf("[build] cannot determine last commit: %s", err)
+		branchNotif := make(map[string]struct {
+			notif *notif
+			dir   string
+		})
+		for branch, dir := range procf.Merges {
+			git := newGitcommits()
+			log.Printf("[build] getting last commit for branch %s in %s", branch, dir)
+			if err := git.last(1, dir); err != nil {
+				log.Printf("[build] cannot determine last commit for branch %s dir %s: %s", branch, dir, err)
+				continue
+			}
+			branchNotif[branch] = struct {
+				notif *notif
+				dir   string
+			}{
+				notif: newNotif(proname, string(git.commits[0].hash), branch),
+				dir:   dir,
+			}
 		}
 		for _, branch := range procf.Statics {
-			notifyMerge := branch == "master"
-			notif := newNotif(proname, sha1, branch)
-			builds, err := newBuilds(notif, cf)
+			bn, notifyMerge := branchNotif[branch]
+			if !notifyMerge {
+				bn.notif = newNotif(proname, "", branch)
+			}
+			builds, err := newBuilds(bn.notif, cf)
 			if err != nil {
 				log.Printf("[build] cannot add existing build %s, branch %s: %s", proname, branch, err)
 				continue
@@ -63,7 +76,8 @@ func newProjects(cf *config, bots mergebots) *projects {
 				log.Printf("[build] added stage %s tracking %s", b.stage, branch)
 				if notifyMerge {
 					// Set the master information for merges handling
-					bots[proname].initMaster(notif, b)
+					// TODO: This is ugly because it needs a build object. Check.
+					bots[proname].initMaster(bn.dir, bn.notif, b)
 					notifyMerge = false
 				}
 			}
