@@ -37,6 +37,7 @@ type config struct {
 	Table           string   `json:"table"`
 	LimitBuildsN    int      `json:"limit_builds"`
 	ResultsDuration duration `json:"results_duration"`
+	ResultsCleanup  duration `json:"results_cleanup"`
 	CommandTimeout  duration `json:"command_timeout"`
 	Commands        struct {
 		CmdChange  []string `json:"change"`
@@ -80,7 +81,7 @@ func newConfig(fname string) (*config, error) {
 		log.Printf("[info] no database configured, using memory storage")
 		c.storage = store.NewMemory()
 	}
-	if c.ResultsDuration > 0 {
+	if c.ResultsDuration > 0 && c.ResultsCleanup > 0 {
 		go c.cleaner()
 	}
 	return &c, nil
@@ -88,13 +89,14 @@ func newConfig(fname string) (*config, error) {
 
 func (c *config) cleaner() {
 	d := time.Duration(c.ResultsDuration)
+	s := time.Duration(c.ResultsCleanup)
 	for {
 		before := time.Now().Add(-d)
 		log.Printf("[server] results cleaner: cleaning jobs before %s", before.Format("2006-02-01 15:04:05"))
 		if err := c.storage.Clean(before); err != nil {
 			log.Printf("[error] results cleaner: %s", err)
 		}
-		time.Sleep(d)
+		time.Sleep(s)
 	}
 }
 

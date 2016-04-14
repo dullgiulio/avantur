@@ -3,8 +3,9 @@
 	"database": "USER:PASSWORD@tcp(localhost:3306)/DATABASE",
 	"table": "build_results",
 	"command_timeout": "10m",
-	"results_duration": "7d",
-    "commands": {
+	"results_duration": "168h",
+	"results_cleanup": "30m",
+	"commands": {
 		"create": ["deploy-tool", "env:init", "{STAGE}", "-b", "{BRANCH}"],
 		"update": ["deploy-tool" "deploy", "{STAGE}"],
 		"change": ["deploy-tool", "deploy", "{STAGE}", "--branch={BRANCH}"],
