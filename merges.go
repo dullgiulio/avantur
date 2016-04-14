@@ -49,15 +49,8 @@ func (b *mergebot) initMaster(dir string, notif *notif, build *build) {
 		sha1:  notif.sha1,
 		build: build,
 	}
-	/*
-		cf, ok := b.conf.Envs[b.project]
-		if !ok {
-			log.Printf("[mergebot] %s: cannot find a directory to run git in", b.project)
-			return
-		}
-	*/
 	b.master.dir = dir
-	log.Printf("[mergebot] %s: init master to %s using stage %s", b.project, notif.sha1, build.stage)
+	log.Printf("[mergebot] %s: init %s to %s using stage %s", b.project, notif.branch, notif.sha1, build.stage)
 }
 
 func (b *mergebot) send(req *mergereq) {
@@ -99,7 +92,7 @@ func (b *mergebot) run(projects *projects) {
 				projects.merge(bv.build, req.notif, b)
 			}
 		}
-		log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, bv.build.stage)
+		log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, bv.build.stage)
 		bv.sha1 = req.notif.sha1
 	}
 }
