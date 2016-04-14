@@ -190,6 +190,7 @@ func (b *build) execute(req *buildReq) {
 	br.Branch = b.branch
 	br.SHA1 = req.notif.sha1
 	br.Stage = b.stage
+	br.Ticket = b.ticketNo
 	if err = b.conf.storage.Add(br); err != nil {
 		log.Printf("[build] cannot persist build result: %s", err)
 	}
