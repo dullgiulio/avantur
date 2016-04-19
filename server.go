@@ -28,18 +28,11 @@ func newServer(cf *config) *server {
 		notifs:    make(chan *notif),
 		mergebots: makeMergebots(),
 	}
-	for project := range cf.Envs {
-		s.mergebots.add(project, cf)
-	}
 	return s
 }
 
 func (s *server) serveBuilds(cf *config) {
 	projects := newProjects(cf, s.mergebots)
-	for project := range cf.Envs {
-		bot := s.mergebots.get(project)
-		go bot.run(projects)
-	}
 
 	for n := range s.notifs {
 		log.Printf("[server] project %s: branch %s: handling notification for %s", n.project, n.branch, n.sha1)

@@ -41,15 +41,19 @@ func newProjects(cf *config, bots mergebots) *projects {
 		reqs:   make(chan *projectsReq),
 	}
 	for proname, procf := range cf.Envs {
+		// Start a mergebot for this project
+		bot := bots.create(proname, cf)
+		go bot.run(pjs)
+
 		branchNotif := make(map[string]struct {
 			notif *notif
 			dir   string
 		})
 		for branch, dir := range procf.Merges {
 			git := newGitcommits()
-			log.Printf("[build] getting last commit for branch %s in %s", branch, dir)
+			log.Printf("[project] getting last commit for branch %s in %s", branch, dir)
 			if err := git.last(1, dir); err != nil {
-				log.Printf("[build] cannot determine last commit for branch %s dir %s: %s", branch, dir, err)
+				log.Printf("[project] cannot determine last commit for branch %s dir %s: %s", branch, dir, err)
 				continue
 			}
 			branchNotif[branch] = struct {
@@ -67,17 +71,16 @@ func newProjects(cf *config, bots mergebots) *projects {
 			}
 			builds, err := newBuilds(bn.notif, cf)
 			if err != nil {
-				log.Printf("[build] cannot add existing build %s, branch %s: %s", proname, branch, err)
+				log.Printf("[project] cannot add existing build %s, branch %s: %s", proname, branch, err)
 				continue
 			}
 			for _, b := range builds {
 				pjs.stages[b.stage] = b
 				go b.run()
-				log.Printf("[build] added stage %s tracking %s", b.stage, branch)
+				log.Printf("[project] added stage %s tracking %s", b.stage, branch)
 				if notifyMerge {
-					// Set the master information for merges handling
 					// TODO: This is ugly because it needs a build object. Check.
-					bots[proname].initMaster(bn.dir, bn.notif, b)
+					bot.addCheckout(bn.dir, bn.notif, b)
 					notifyMerge = false
 				}
 			}
@@ -97,7 +100,7 @@ func (p *projects) run() {
 			err = p.doMerge(req)
 		}
 		if err != nil {
-			log.Printf("[build] error processing build action: %s", err)
+			log.Printf("[project] error processing build action: %s", err)
 		}
 	}
 }
@@ -106,8 +109,8 @@ func (p *projects) push(b *build, n *notif, bot *mergebot) {
 	p.reqs <- newProjectsReq(projectsActPush, b, n, bot)
 }
 
-func (p *projects) merge(b *build, n *notif, bot *mergebot) {
-	p.reqs <- newProjectsReq(projectsActMerge, b, n, bot)
+func (p *projects) merge(b *build, n *notif) {
+	p.reqs <- newProjectsReq(projectsActMerge, b, n, nil)
 }
 
 // A branch has been pushed: create env or deploy to existing
@@ -129,7 +132,7 @@ func (p *projects) doPush(req *projectsReq) error {
 
 func (p *projects) doMerge(req *projectsReq) error {
 	stage := req.build.stage
-	log.Printf("[build] remove build stage %s", stage)
+	log.Printf("[project] remove build stage %s", stage)
 	build, ok := p.stages[stage]
 	if !ok {
 		return fmt.Errorf("unknown stage %s merged", stage)
