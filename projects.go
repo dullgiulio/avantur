@@ -80,42 +80,52 @@ func newProjects(cf *config, bots mergebots) *projects {
 		stages: make(map[string]*build),
 		reqs:   make(chan *projectsReq),
 	}
-	for proname, procf := range cf.Envs {
-		// Start a mergebot for this project
-		bot := bots.create(proname, cf)
-		go bot.run(pjs)
-		// Detect the last commit for each checked-out project
-		branchNotif := newBranchDirnotif(proname)
-		for branch, dir := range procf.Merges {
-			if err := branchNotif.add(branch, dir); err != nil {
-				log.Printf("[project] %s: error initializing checked-out project: %s", proname, err)
-			}
-		}
-		// Create builds for already existing static environments
-		for _, branch := range procf.Statics {
-			bn, notifyMerge := branchNotif.get(branch)
-			builds, err := newBuilds(bn.notif, cf)
-			if err != nil {
-				log.Printf("[project] cannot add existing build %s, branch %s: %s", proname, branch, err)
-				continue
-			}
-			if len(builds) == 0 {
-				log.Printf("[project] no static builds to manage for %s, branch %s", proname, branch)
-				continue
-			}
-			for _, b := range builds {
-				pjs.stages[b.stage] = b
-				go b.run()
-				log.Printf("[project] added stage %s tracking %s", b.stage, branch)
-			}
-			// Notify the merge detector that this is the current build and notif for this directory
-			if notifyMerge {
-				bot.addCheckout(bn.dir, bn.notif, builds[0])
-			}
-		}
+	for name := range cf.Envs {
+		pjs.initProject(name, bots, cf)
 	}
 	go pjs.run()
 	return pjs
+}
+
+func (p *projects) initProject(name string, bots mergebots, cf *config) {
+	envcf := cf.Envs[name]
+	// Start a mergebot for this project
+	bot := bots.create(name, cf)
+	go bot.run(p)
+	// Detect the last commit for each checked-out project
+	branchNotif := newBranchDirnotif(name)
+	for branch, dir := range envcf.Merges {
+		if err := branchNotif.add(branch, dir); err != nil {
+			log.Printf("[project] %s: error initializing checked-out project: %s", name, err)
+		}
+	}
+	// Create builds for already existing static environments
+	for _, branch := range envcf.Statics {
+		if err := p.initStatic(branch, cf, bot, branchNotif); err != nil {
+			log.Printf("[project] %s: cannot init static checkout: %s", name, err)
+		}
+	}
+}
+
+func (p *projects) initStatic(branch string, cf *config, bot *mergebot, bns *branchDirnotif) error {
+	bn, notifyMerge := bns.get(branch)
+	builds, err := newBuilds(bn.notif, cf)
+	if err != nil {
+		return fmt.Errorf("cannot create build for branch %s: %s", branch, err)
+	}
+	if len(builds) == 0 {
+		return fmt.Errorf("no static builds to manage for branch %s", branch)
+	}
+	for _, b := range builds {
+		p.stages[b.stage] = b
+		go b.run()
+		log.Printf("[project] added stage %s tracking %s", b.stage, branch)
+	}
+	// Notify the merge detector that this is the current build and notif for this directory
+	if notifyMerge {
+		bot.addCheckout(bn.dir, bn.notif, builds[0])
+	}
+	return nil
 }
 
 func (p *projects) run() {
