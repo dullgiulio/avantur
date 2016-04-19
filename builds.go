@@ -36,7 +36,12 @@ func (v vars) apply(a []string) []string {
 	return res
 }
 
-func makeCommand(act store.BuildAct, b *build) *exec.Cmd {
+type command struct {
+	cmd  *exec.Cmd
+	name string
+}
+
+func newCommand(act store.BuildAct, b *build) *command {
 	var cmd []string
 	switch act {
 	case store.BuildActCreate:
@@ -52,7 +57,14 @@ func makeCommand(act store.BuildAct, b *build) *exec.Cmd {
 		return nil
 	}
 	cmd = b.stageVars.apply(cmd)
-	return exec.Command(cmd[0], cmd[1:]...)
+	return &command{
+		cmd:  exec.Command(cmd[0], cmd[1:]...),
+		name: strings.Join(cmd, " "),
+	}
+}
+
+func (c *command) String() string {
+	return c.name
 }
 
 type branchStages map[string][]string
@@ -120,22 +132,25 @@ type build struct {
 func newBuilds(n *notif, conf *config) ([]*build, error) {
 	procf, ok := conf.Envs[n.project]
 	if !ok {
-		return nil, fmt.Errorf("[build] project %s not configured", n.project)
+		return nil, fmt.Errorf("project %s not configured", n.project)
 	}
 	defTmpl := procf.Branches["__default__"]
+	if len(defTmpl) == 0 {
+		return nil, fmt.Errorf("project %s does not specify a __default__ template", n.project)
+	}
 	tmpls := branchStages(procf.Branches).match(n.branch, defTmpl)
-	// If it is not a special stage, we can get the ticket number
 	var (
 		ticketNo int64
 		err      error
 	)
+	// If it is not a special stage, we can get the ticket number
 	if tmpls[0] == defTmpl[0] {
 		ticketNo, err = conf.parseTicketNo(n.branch)
 		if err != nil {
 			return nil, err
 		}
 	}
-	bs := make([]*build, 0)
+	bs := make([]*build, 0, len(tmpls))
 	for _, tmpl := range tmpls {
 		b := &build{
 			project:  n.project,
@@ -145,29 +160,28 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 			ticketNo: ticketNo,
 			reqs:     make(chan *buildReq), // TODO: can be buffered
 		}
-		sv := makeVars()
-		sv.add("ENV", n.project)
-		sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
-		sv.add("BRANCH", b.branch)
-		b.stageVars = sv
-		b.stage = b.stageVars.applySingle(tmpl)
-		b.stageVars.add("STAGE", b.stage)
+		b.initVars(n.project, tmpl)
 		bs = append(bs, b)
 	}
 	return bs, nil
 }
 
-func (b *build) ticket() error {
-	var err error
-	b.ticketNo, err = b.conf.parseTicketNo(b.branch)
-	return err
+func (b *build) initVars(project, tmpl string) {
+	sv := makeVars()
+	sv.add("ENV", project)
+	sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
+	sv.add("BRANCH", b.branch)
+	// Stage can include the previous vars
+	b.stage = sv.applySingle(tmpl)
+	sv.add("STAGE", b.stage)
+	b.stageVars = sv
 }
 
-func (b *build) execResult(cmd *exec.Cmd) (*store.BuildResult, error) {
-	return execResult(cmd, time.Duration(b.conf.CommandTimeout))
+func (b *build) execResult(c *command) (*store.BuildResult, error) {
+	return execResult(c.cmd, time.Duration(b.conf.CommandTimeout))
 }
 
-func (b *build) execute(req *buildReq) {
+func (b *build) prepare(req *buildReq) {
 	// On a change request, we might have a different branch
 	if req.act == store.BuildActChange {
 		if b.branch == req.notif.branch {
@@ -177,24 +191,45 @@ func (b *build) execute(req *buildReq) {
 			b.stageVars.add("BRANCH", b.branch)
 		}
 	}
-	cmd := makeCommand(req.act, b)
-	command := strings.Join(cmd.Args, " ")
-	log.Printf("[build] stage %s: branch %s: execute '%s': started", b.stage, b.branch, command)
+}
+
+func (b *build) execute(cmd *command, req *buildReq) (*store.BuildResult, error) {
+	// Run the actual build command
+	log.Printf("[build] stage %s: branch %s: execute '%s': started", b.stage, b.branch, cmd)
 	br, err := b.execResult(cmd)
+	log.Printf("[build] stage %s: branch %s: execute '%s': done", b.stage, b.branch, cmd)
 	if err != nil {
 		log.Printf("[build] command execution failed: %s", err)
-		return
+		return nil, fmt.Errorf("command execution failed: %s", err)
 	}
-	br.Cmd = command
+	return br, nil
+}
+
+func (b *build) persist(cmd *command, req *buildReq, br *store.BuildResult) error {
+	// Fill and persist the build result
+	br.Cmd = cmd.String()
 	br.Act = req.act
 	br.Branch = b.branch
 	br.SHA1 = req.notif.sha1
 	br.Stage = b.stage
 	br.Ticket = b.ticketNo
-	if err = b.conf.storage.Add(br); err != nil {
-		log.Printf("[build] cannot persist build result: %s", err)
+	if err := b.conf.storage.Add(br); err != nil {
+		return fmt.Errorf("cannot persist build result: %s", err)
 	}
-	log.Printf("[build] stage %s: branch %s: execute '%s': done", b.stage, b.branch, command)
+	return nil
+}
+
+func (b *build) doReq(req *buildReq) {
+	b.prepare(req)
+	cmd := newCommand(req.act, b)
+	br, err := b.execute(cmd, req)
+	if err != nil {
+		log.Printf("[build] build failed: %s", err)
+		return
+	}
+	if err := b.persist(cmd, req, br); err != nil {
+		log.Printf("[build] build failed: %s", err)
+	}
 }
 
 func (b *build) run() {
@@ -203,7 +238,7 @@ func (b *build) run() {
 		if b.conf.limitBuilds != nil {
 			<-b.conf.limitBuilds
 		}
-		b.execute(req)
+		b.doReq(req)
 		if b.conf.limitBuilds != nil {
 			b.conf.limitBuilds <- struct{}{}
 		}

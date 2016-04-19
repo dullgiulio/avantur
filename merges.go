@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 )
 
@@ -75,17 +76,15 @@ func (b *mergebot) registerBuild(req *mergereq) {
 	log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, req.build.stage)
 }
 
-func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) {
+func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) error {
 	bv := co.ver
 	log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, bv.sha1, bv.build.stage, co.stage)
 	commits := newGitcommits()
 	if bv.sha1 == "" {
-		log.Printf("[mergebot] %s: cannot fetch commits since last build, last SHA1 is empty", b.project)
-		return
+		return fmt.Errorf("cannot fetch commits since last build, last SHA1 is empty", b.project)
 	}
 	if err := commits.since(bv.sha1, co.dir); err != nil {
-		log.Printf("[mergebot] %s: %s: can't fetch commits since %s: %s", b.project, co.dir, bv.sha1, err)
-		return
+		return fmt.Errorf("%s: can't fetch commits since %s: %s", co.dir, bv.sha1, err)
 	}
 	for _, bv := range b.vers {
 		if commits.contains(githash(bv.sha1)) {
@@ -97,6 +96,7 @@ func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) {
 	}
 	log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, bv.build.stage)
 	bv.sha1 = req.notif.sha1
+	return nil
 }
 
 func (b *mergebot) send(req *mergereq) {
@@ -112,7 +112,9 @@ func (b *mergebot) run(pjs *projects) {
 			continue
 		}
 		// It's a push to a checked out stage, trigger the delete etc
-		b.checkMerged(req, co, pjs)
+		if err := b.checkMerged(req, co, pjs); err != nil {
+			log.Printf("[mergebot] %s: %s", b.project, err)
+		}
 	}
 }
 

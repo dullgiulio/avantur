@@ -35,6 +35,46 @@ type projects struct {
 	reqs   chan *projectsReq
 }
 
+type dirnotif struct {
+	notif *notif
+	dir   string
+}
+
+type branchDirnotif struct {
+	entries map[string]*dirnotif
+	name    string
+}
+
+func newBranchDirnotif(name string) *branchDirnotif {
+	return &branchDirnotif{
+		entries: make(map[string]*dirnotif),
+		name:    name,
+	}
+}
+
+func (b *branchDirnotif) add(branch, dir string) error {
+	git := newGitcommits()
+	log.Printf("[project] getting last commit for branch %s in %s", branch, dir)
+	if err := git.last(1, dir); err != nil {
+		return fmt.Errorf("cannot detect last commit for branch %s dir %s: %s", branch, dir, err)
+	}
+	b.entries[branch] = &dirnotif{
+		notif: newNotif(b.name, string(git.commits[0].hash), branch),
+		dir:   dir,
+	}
+	return nil
+}
+
+func (b branchDirnotif) get(branch string) (*dirnotif, bool) {
+	bn, ok := b.entries[branch]
+	if ok {
+		return bn, true
+	}
+	return &dirnotif{
+		notif: newNotif(b.name, "", branch),
+	}, false
+}
+
 func newProjects(cf *config, bots mergebots) *projects {
 	pjs := &projects{
 		stages: make(map[string]*build),
@@ -44,45 +84,33 @@ func newProjects(cf *config, bots mergebots) *projects {
 		// Start a mergebot for this project
 		bot := bots.create(proname, cf)
 		go bot.run(pjs)
-
-		branchNotif := make(map[string]struct {
-			notif *notif
-			dir   string
-		})
+		// Detect the last commit for each checked-out project
+		branchNotif := newBranchDirnotif(proname)
 		for branch, dir := range procf.Merges {
-			git := newGitcommits()
-			log.Printf("[project] getting last commit for branch %s in %s", branch, dir)
-			if err := git.last(1, dir); err != nil {
-				log.Printf("[project] cannot determine last commit for branch %s dir %s: %s", branch, dir, err)
-				continue
-			}
-			branchNotif[branch] = struct {
-				notif *notif
-				dir   string
-			}{
-				notif: newNotif(proname, string(git.commits[0].hash), branch),
-				dir:   dir,
+			if err := branchNotif.add(branch, dir); err != nil {
+				log.Printf("[project] %s: error initializing checked-out project: %s", proname, err)
 			}
 		}
+		// Create builds for already existing static environments
 		for _, branch := range procf.Statics {
-			bn, notifyMerge := branchNotif[branch]
-			if !notifyMerge {
-				bn.notif = newNotif(proname, "", branch)
-			}
+			bn, notifyMerge := branchNotif.get(branch)
 			builds, err := newBuilds(bn.notif, cf)
 			if err != nil {
 				log.Printf("[project] cannot add existing build %s, branch %s: %s", proname, branch, err)
+				continue
+			}
+			if len(builds) == 0 {
+				log.Printf("[project] no static builds to manage for %s, branch %s", proname, branch)
 				continue
 			}
 			for _, b := range builds {
 				pjs.stages[b.stage] = b
 				go b.run()
 				log.Printf("[project] added stage %s tracking %s", b.stage, branch)
-				if notifyMerge {
-					// TODO: This is ugly because it needs a build object. Check.
-					bot.addCheckout(bn.dir, bn.notif, b)
-					notifyMerge = false
-				}
+			}
+			// Notify the merge detector that this is the current build and notif for this directory
+			if notifyMerge {
+				bot.addCheckout(bn.dir, bn.notif, builds[0])
 			}
 		}
 	}

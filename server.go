@@ -19,20 +19,18 @@ func newNotif(project, sha1, branch string) *notif {
 }
 
 type server struct {
-	notifs    chan *notif
-	mergebots mergebots
+	notifs chan *notif
 }
 
 func newServer(cf *config) *server {
-	s := &server{
-		notifs:    make(chan *notif),
-		mergebots: makeMergebots(),
+	return &server{
+		notifs: make(chan *notif),
 	}
-	return s
 }
 
 func (s *server) serveBuilds(cf *config) {
-	projects := newProjects(cf, s.mergebots)
+	mergebots := makeMergebots()
+	projects := newProjects(cf, mergebots)
 
 	for n := range s.notifs {
 		log.Printf("[server] project %s: branch %s: handling notification for %s", n.project, n.branch, n.sha1)
@@ -41,7 +39,7 @@ func (s *server) serveBuilds(cf *config) {
 			log.Printf("[server] project %s: branch %s: no builds created: %s", n.project, n.branch, err)
 			continue
 		}
-		bot := s.mergebots.get(n.project)
+		bot := mergebots.get(n.project)
 		if bot == nil {
 			log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
 			continue
