@@ -77,25 +77,30 @@ func (b *mergebot) registerBuild(req *mergereq) {
 }
 
 func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) error {
-	bv := co.ver
-	log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, bv.sha1, bv.build.stage, co.stage)
+	ver := co.ver
+	log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, ver.sha1, ver.build.stage, co.stage)
 	commits := newGitcommits()
-	if bv.sha1 == "" {
+	if ver.sha1 == "" {
 		return fmt.Errorf("cannot fetch commits since last build, last SHA1 is empty", b.project)
 	}
-	if err := commits.since(bv.sha1, co.dir); err != nil {
-		return fmt.Errorf("%s: can't fetch commits since %s: %s", co.dir, bv.sha1, err)
+	if err := commits.since(ver.sha1, co.dir); err != nil {
+		return fmt.Errorf("%s: can't fetch commits since %s: %s", co.dir, ver.sha1, err)
 	}
-	for _, bv := range b.vers {
+	merged := make([]string, 0) // merged stages to remove
+	for k, bv := range b.vers {
 		if commits.contains(githash(bv.sha1)) {
 			log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
 			// As we have been called by pjs, to make a request we need to wait for the current one to finish.
 			// To avoid a deadlock, we must notify of the merge in the background.
 			go pjs.merge(bv.build, req.notif)
+			merged = append(merged, k)
 		}
 	}
-	log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, bv.build.stage)
-	bv.sha1 = req.notif.sha1
+	for _, k := range merged {
+		delete(b.vers, k)
+	}
+	log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, ver.build.stage)
+	ver.sha1 = req.notif.sha1
 	return nil
 }
 
