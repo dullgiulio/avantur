@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -35,6 +37,7 @@ const (
 )
 
 type Mysql struct {
+	mux          sync.Mutex
 	db           *sql.DB
 	tableName    string
 	stmtAdd      *sql.Stmt
@@ -51,11 +54,23 @@ func NewMysql(dsn, tableName string) (*Mysql, error) {
 	if err = m.initStmts(); err != nil {
 		return nil, err
 	}
+	go m.refreshStmts(30 * time.Minute) // TODO: configurable
 	return m, nil
+}
+
+func (m *Mysql) refreshStmts(d time.Duration) {
+	c := time.Tick(d)
+	for range c {
+		if err := m.initStmts(); err != nil {
+			log.Printf("[mysql] error while creating prepared statements: %s", err)
+		}
+	}
 }
 
 func (m *Mysql) initStmts() error {
 	var err error
+	m.mux.Lock()
+	defer m.mux.Unlock()
 	if _, err = m.db.Exec(createTable); err != nil {
 		return fmt.Errorf("cannot create storage table: %s", err)
 	}
@@ -72,6 +87,8 @@ func (m *Mysql) initStmts() error {
 }
 
 func (m *Mysql) Add(br *BuildResult) error {
+	m.mux.Lock()
+	defer m.mux.Unlock()
 	_, err := m.stmtAdd.Exec(br.Start, br.End, br.Act, br.Ticket, br.Retval, br.SHA1,
 		br.Stage, br.Cmd, br.Branch, br.Stdout, br.Stderr)
 	return err
@@ -83,11 +100,15 @@ func (m *Mysql) Get(stage string) ([]*BuildResult, error) {
 }
 
 func (m *Mysql) Delete(stage string) error {
+	m.mux.Lock()
+	defer m.mux.Unlock()
 	_, err := m.stmtDelStage.Exec(stage)
 	return err
 }
 
 func (m *Mysql) Clean(until time.Time) error {
+	m.mux.Lock()
+	defer m.mux.Unlock()
 	_, err := m.stmtDelClean.Exec(until)
 	return err
 }
