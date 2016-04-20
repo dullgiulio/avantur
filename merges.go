@@ -99,8 +99,6 @@ func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) error
 	for _, k := range merged {
 		delete(b.vers, k)
 	}
-	log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, ver.build.stage)
-	ver.sha1 = req.notif.sha1
 	return nil
 }
 
@@ -120,6 +118,8 @@ func (b *mergebot) run(pjs *projects) {
 		if err := b.checkMerged(req, co, pjs); err != nil {
 			log.Printf("[mergebot] %s: %s", b.project, err)
 		}
+		co.ver.sha1 = req.notif.sha1
+		log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, co.ver.build.stage)
 	}
 }
 
