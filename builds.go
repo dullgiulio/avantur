@@ -53,7 +53,7 @@ func newCommand(act store.BuildAct, b *build) *command {
 	case store.BuildActDestroy:
 		cmd = b.conf.Commands.CmdDestroy
 	}
-	if cmd == nil {
+	if len(cmd) == 0 {
 		return nil
 	}
 	cmd = b.stageVars.apply(cmd)
@@ -108,6 +108,10 @@ func newBuildReq(act store.BuildAct, n *notif) *buildReq {
 		notif:  n,
 		doneCh: make(chan struct{}),
 	}
+}
+
+func (r *buildReq) String() string {
+	return fmt.Sprintf("build-request %s", r.notif)
 }
 
 func (r *buildReq) done() {
@@ -166,6 +170,10 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 	return bs, nil
 }
 
+func (b *build) String() string {
+	return fmt.Sprintf("%s: %s", b.stage, b.branch)
+}
+
 func (b *build) initVars(project, tmpl string) {
 	sv := makeVars()
 	sv.add("ENV", project)
@@ -195,11 +203,10 @@ func (b *build) prepare(req *buildReq) {
 
 func (b *build) execute(cmd *command, req *buildReq) (*store.BuildResult, error) {
 	// Run the actual build command
-	log.Printf("[build] stage %s: branch %s: execute '%s': started", b.stage, b.branch, cmd)
+	log.Printf("[build] %s: start '%s'", b, cmd)
 	br, err := b.execResult(cmd)
-	log.Printf("[build] stage %s: branch %s: execute '%s': done", b.stage, b.branch, cmd)
+	log.Printf("[build] %s: done '%s'", b, cmd)
 	if err != nil {
-		log.Printf("[build] command execution failed: %s", err)
 		return nil, fmt.Errorf("command execution failed: %s", err)
 	}
 	return br, nil
@@ -222,13 +229,17 @@ func (b *build) persist(cmd *command, req *buildReq, br *store.BuildResult) erro
 func (b *build) doReq(req *buildReq) {
 	b.prepare(req)
 	cmd := newCommand(req.act, b)
+	if cmd == nil {
+		log.Printf("[build] %s: nothing to do", req)
+		return
+	}
 	br, err := b.execute(cmd, req)
 	if err != nil {
-		log.Printf("[build] build failed: %s", err)
+		log.Printf("[build] %s: build failed: %s", req, err)
 		return
 	}
 	if err := b.persist(cmd, req, br); err != nil {
-		log.Printf("[build] build failed: %s", err)
+		log.Printf("[build] %s: build failed: %s", req, err)
 	}
 }
 
@@ -244,7 +255,7 @@ func (b *build) run() {
 		}
 		req.done()
 	}
-	log.Printf("[build] %s: terminated", b.stage)
+	log.Printf("[build] %s: terminated", b)
 }
 
 func (b *build) request(act store.BuildAct, n *notif) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 )
 
@@ -18,6 +19,10 @@ func newNotif(project, sha1, branch string) *notif {
 	}
 }
 
+func (n *notif) String() string {
+	return fmt.Sprintf("%s: %s: %s", n.project, n.branch, n.sha1)
+}
+
 type server struct {
 	notifs chan *notif
 }
@@ -33,10 +38,10 @@ func (s *server) serveBuilds(cf *config) {
 	projects := newProjects(cf, mergebots)
 
 	for n := range s.notifs {
-		log.Printf("[server] project %s: branch %s: handling notification for %s", n.project, n.branch, n.sha1)
+		log.Printf("[server] %s: handling notification", n)
 		bs, err := newBuilds(n, cf)
 		if err != nil {
-			log.Printf("[server] project %s: branch %s: no builds created: %s", n.project, n.branch, err)
+			log.Printf("[server] %s: no builds created: %s", n, err)
 			continue
 		}
 		bot := mergebots.get(n.project)
