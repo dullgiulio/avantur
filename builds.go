@@ -70,10 +70,10 @@ func (c *command) String() string {
 type branchStages map[string][]string
 
 // match returns the stage template for a branch
-func (br branchStages) match(branch string, def []string) []string {
+func (br branchStages) match(branch string) ([]string, bool) {
 	tmpls, ok := br[branch]
 	if ok {
-		return tmpls
+		return tmpls, true
 	}
 	var (
 		found bool
@@ -90,10 +90,10 @@ func (br branchStages) match(branch string, def []string) []string {
 			continue
 		}
 		if found {
-			return stage
+			return stage, true
 		}
 	}
-	return def
+	return nil, false
 }
 
 type buildReq struct {
@@ -138,21 +138,24 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 	if !ok {
 		return nil, fmt.Errorf("project %s not configured", n.project)
 	}
-	defTmpl := procf.Branches["__default__"]
-	if len(defTmpl) == 0 {
-		return nil, fmt.Errorf("project %s does not specify a __default__ template", n.project)
-	}
-	tmpls := branchStages(procf.Branches).match(n.branch, defTmpl)
 	var (
 		ticketNo int64
 		err      error
 	)
+	tmpls, matched := branchStages(procf.Branches).match(n.branch)
 	// If it is not a special stage, we can get the ticket number
-	if tmpls[0] == defTmpl[0] {
+	if !matched {
+		tmpls = procf.Branches["__default__"]
+		if len(tmpls) == 0 {
+			return nil, fmt.Errorf("project %s does not specify a __default__ template", n.project)
+		}
 		ticketNo, err = conf.parseTicketNo(n.branch)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("extrating ticket number: %s", err)
 		}
+	}
+	if len(tmpls) == 0 {
+		return nil, fmt.Errorf("project %s has no stages to build for branch %s", n.project, n.branch)
 	}
 	bs := make([]*build, 0, len(tmpls))
 	for _, tmpl := range tmpls {
@@ -239,7 +242,7 @@ func (b *build) doReq(req *buildReq) {
 		return
 	}
 	if err := b.persist(cmd, req, br); err != nil {
-		log.Printf("[build] %s: build failed: %s", req, err)
+		log.Printf("[build] %s: build persistance failed: %s", req, err)
 	}
 }
 
