@@ -34,6 +34,7 @@ func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error
 	var out, errOut bytes.Buffer
 
 	wait := make(chan error)
+	over := make(chan struct{})
 	cmd.Stdout = &out
 	cmd.Stderr = &errOut
 	br := &store.BuildResult{
@@ -43,21 +44,19 @@ func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error
 		return nil, err
 	}
 	go func() {
-		wait <- cmd.Wait()
-		close(wait)
-	}()
-	time.AfterFunc(timeout, func() {
-		cmd.Process.Kill()
-		if werr := <-wait; werr != nil {
-			err = errors.New("timeout while executing command")
-		} else {
-			err = fmt.Errorf("timeout while executing command, kill process failed: %s", err)
+		select {
+		case err = <-wait:
+		case <-time.After(timeout):
+			if err = cmd.Process.Kill(); err != nil {
+				err = errors.New("timeout while executing command")
+			} else {
+				err = fmt.Errorf("timeout while executing command, kill process failed: %s", err)
+			}
 		}
-	})
-	werr := <-wait
-	if werr != nil && err == nil {
-		err = werr
-	}
+		over <- struct{}{}
+	}()
+	wait <- cmd.Wait()
+	<-over
 	retval := 0
 	if e, ok := err.(*exec.ExitError); ok {
 		if status, ok := e.Sys().(syscall.WaitStatus); ok {
