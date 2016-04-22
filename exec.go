@@ -52,6 +52,7 @@ func execResult(cmd *exec.Cmd, timeout time.Duration) (*store.BuildResult, error
 			} else {
 				err = fmt.Errorf("timeout while executing command, kill process failed: %s", err)
 			}
+			<-wait
 		}
 		over <- struct{}{}
 	}()
