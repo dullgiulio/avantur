@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -177,15 +178,30 @@ func (b *build) String() string {
 	return fmt.Sprintf("%s: %s", b.stage, b.branch)
 }
 
+func (b *build) url(tmpl string) string {
+	// Variables to make the GET url, Jenkins-style
+	v := url.Values{}
+	v.Set("branches", b.branch)
+	v.Set("sha1", b.sha1)
+	// Variables to display in the template
+	vs := makeVars()
+	vs.add("branch", b.branch)
+	vs.add("sha1", b.sha1)
+	vs.add("ticket", fmt.Sprintf("%d", b.ticketNo))
+	vs.add("project", b.project)
+	vs.add("params", v.Encode())
+	return vs.applySingle(tmpl)
+}
+
 func (b *build) initVars(project, tmpl string) {
-	sv := makeVars()
-	sv.add("ENV", project)
-	sv.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
-	sv.add("BRANCH", b.branch)
+	vs := makeVars()
+	vs.add("ENV", project)
+	vs.add("TICKET", fmt.Sprintf("%d", b.ticketNo))
+	vs.add("BRANCH", b.branch)
 	// Stage can include the previous vars
-	b.stage = sv.applySingle(tmpl)
-	sv.add("STAGE", b.stage)
-	b.stageVars = sv
+	b.stage = vs.applySingle(tmpl)
+	vs.add("STAGE", b.stage)
+	b.stageVars = vs
 }
 
 func (b *build) execResult(c *command) (*store.BuildResult, error) {

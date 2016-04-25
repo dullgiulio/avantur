@@ -54,6 +54,7 @@ type config struct {
 	// Limit the number of concurrent builds that can be performed
 	limitBuilds chan struct{}
 	storage     store.Store
+	urls        *urls
 }
 
 func newConfig(fname string) (*config, error) {
@@ -81,6 +82,7 @@ func newConfig(fname string) (*config, error) {
 		log.Printf("[info] no database configured, using memory storage")
 		c.storage = store.NewMemory()
 	}
+	c.urls = newUrls()
 	if c.ResultsDuration > 0 && c.ResultsCleanup > 0 {
 		go c.cleaner()
 	}

@@ -25,32 +25,38 @@ func (n *notif) String() string {
 
 type server struct {
 	notifs chan *notif
+	conf   *config
 }
 
-func newServer(cf *config) *server {
+func newServer(conf *config) *server {
 	return &server{
 		notifs: make(chan *notif),
+		conf:   conf,
 	}
 }
 
-func (s *server) serveBuilds(cf *config) {
-	mergebots := makeMergebots()
-	projects := newProjects(cf, mergebots)
+func (s *server) serveReqs(cf *config) {
+	bots := makeMergebots()
+	pros := newProjects(cf, bots)
 
 	for n := range s.notifs {
-		log.Printf("[server] %s: handling notification", n)
-		bs, err := newBuilds(n, cf)
-		if err != nil {
-			log.Printf("[server] %s: no builds created: %s", n, err)
-			continue
-		}
-		bot := mergebots.get(n.project)
-		if bot == nil {
-			log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
-			continue
-		}
-		for _, b := range bs {
-			projects.push(b, n, bot)
-		}
+		s.handleNotif(cf, n, bots, pros)
+	}
+}
+
+func (s *server) handleNotif(cf *config, n *notif, bots mergebots, pros *projects) {
+	log.Printf("[server] %s: handling notification", n)
+	bs, err := newBuilds(n, cf)
+	if err != nil {
+		log.Printf("[server] %s: no builds created: %s", n, err)
+		return
+	}
+	bot := bots.get(n.project)
+	if bot == nil {
+		log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
+		return
+	}
+	for _, b := range bs {
+		pros.push(b, n, bot)
 	}
 }

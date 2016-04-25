@@ -33,6 +33,7 @@ func newProjectsReq(act projectsAct, b *build, n *notif, bot *mergebot) *project
 type projects struct {
 	stages map[string]*build // stage : build
 	reqs   chan *projectsReq
+	conf   *config
 }
 
 type dirnotif struct {
@@ -79,6 +80,7 @@ func newProjects(cf *config, bots mergebots) *projects {
 	pjs := &projects{
 		stages: make(map[string]*build),
 		reqs:   make(chan *projectsReq),
+		conf:   cf,
 	}
 	for name := range cf.Envs {
 		pjs.initProject(name, bots, cf)
@@ -155,6 +157,7 @@ func (p *projects) merge(b *build, n *notif) {
 func (p *projects) doPush(req *projectsReq) error {
 	var act store.BuildAct
 	if existingBuild, ok := p.stages[req.build.stage]; !ok {
+		p.conf.urls.set(req.build.stage, req.build.url(reverseJenkinsURL)) // TODO: Using global here sucks.
 		p.stages[req.build.stage] = req.build
 		act = store.BuildActCreate
 		go req.build.run()
