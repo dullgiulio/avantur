@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dullgiulio/avantur/store"
+	"github.com/dullgiulio/umarell-ci/store"
 )
 
 type vars map[string]string

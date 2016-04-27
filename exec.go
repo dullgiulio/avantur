@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dullgiulio/avantur/store"
+	"github.com/dullgiulio/umarell-ci/store"
 )
 
 type execError struct {

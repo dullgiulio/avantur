@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/dullgiulio/avantur/store"
+	"github.com/dullgiulio/umarell-ci/store"
 )
 
 type projectsAct int

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dullgiulio/avantur/store"
+	"github.com/dullgiulio/umarell-ci/store"
 )
 
 type duration time.Duration
