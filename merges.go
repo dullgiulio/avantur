@@ -6,6 +6,7 @@ import (
 )
 
 type buildver struct {
+	// sha1 records the previous version compared to build.sha1.
 	sha1  string
 	build *build
 }
@@ -90,6 +91,7 @@ func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) error
 	for k, bv := range b.vers {
 		if commits.contains(githash(bv.sha1)) {
 			log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
+			b.conf.urls.del(bv.build.stage)
 			// As we have been called by pjs, to make a request we need to wait for the current one to finish.
 			// To avoid a deadlock, we must notify of the merge in the background.
 			go pjs.merge(bv.build, req.notif)
@@ -108,19 +110,23 @@ func (b *mergebot) send(req *mergereq) {
 
 func (b *mergebot) run(pjs *projects) {
 	for req := range b.reqs {
-		co, hasCheckout := b.checkouts[req.build.stage]
-		if !hasCheckout {
-			// normally update some tracked version
-			b.registerBuild(req)
-			continue
-		}
-		// It's a push to a checked out stage, trigger the delete etc
-		if err := b.checkMerged(req, co, pjs); err != nil {
-			log.Printf("[mergebot] %s: %s", b.project, err)
-		}
-		co.ver.sha1 = req.notif.sha1
-		log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, co.ver.build.stage)
+		b.doReq(req, pjs)
 	}
+}
+
+func (b *mergebot) doReq(req *mergereq, pjs *projects) {
+	co, hasCheckout := b.checkouts[req.build.stage]
+	if !hasCheckout {
+		// normally update some tracked version
+		b.registerBuild(req)
+		return
+	}
+	// It's a push to a checked out stage, trigger the delete etc
+	if err := b.checkMerged(req, co, pjs); err != nil {
+		log.Printf("[mergebot] %s: %s", b.project, err)
+	}
+	co.ver.sha1 = req.notif.sha1
+	log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, co.ver.build.stage)
 }
 
 type mergebots map[string]*mergebot // project : mergebots

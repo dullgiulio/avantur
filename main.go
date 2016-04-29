@@ -15,7 +15,7 @@ func main() {
 		log.Fatal("configuration file failed to load: ", err)
 	}
 	srv := newServer(cfg)
-	go srv.serveBuilds(cfg)
+	go srv.serveReqs(cfg)
 	log.Printf("Listening to port %s", *listen)
 	srv.serveHTTP(*listen)
 }
