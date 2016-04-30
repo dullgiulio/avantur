@@ -32,6 +32,7 @@ func newProjectsReq(act projectsAct, b *build, n *notif, bot *mergebot) *project
 
 type projects struct {
 	stages map[string]*build // stage : build
+	notifs map[string]*notif // stage : notif
 	reqs   chan *projectsReq
 	conf   *config
 }
@@ -79,6 +80,7 @@ func (b branchDirnotif) get(branch string) (*dirnotif, bool) {
 func newProjects(cf *config, bots mergebots) *projects {
 	pjs := &projects{
 		stages: make(map[string]*build),
+		notifs: make(map[string]*notif),
 		reqs:   make(chan *projectsReq),
 		conf:   cf,
 	}
@@ -135,9 +137,22 @@ func (p *projects) run() {
 		var err error
 		switch req.act {
 		case projectsActPush:
+			p.notifs[req.build.stage] = req.notif
 			err = p.doPush(req)
 		case projectsActMerge:
-			err = p.doMerge(req)
+			notif, ok := p.notifs[req.build.stage]
+			if !ok {
+				log.Printf("[project] skipping ghost merge request for %s", req.build.stage)
+				continue
+			}
+			// We can accept a merge notification if there have been no new
+			// pushes after the merge check was first triggered.
+			if notif.equal(req.notif) {
+				err = p.doMerge(req)
+				delete(p.notifs, req.build.stage)
+			} else {
+				log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
+			}
 		}
 		if err != nil {
 			log.Printf("[project] error processing build action: %s", err)

@@ -123,7 +123,7 @@ func (b *mergebot) doReq(req *mergereq, pjs *projects) {
 	}
 	// It's a push to a checked out stage, trigger the delete etc
 	if err := b.checkMerged(req, co, pjs); err != nil {
-		log.Printf("[mergebot] %s: %s", b.project, err)
+		log.Printf("[mergebot] %s: failed merge check: %s", b.project, err)
 	}
 	co.ver.sha1 = req.notif.sha1
 	log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, co.ver.build.stage)

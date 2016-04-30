@@ -23,6 +23,10 @@ func (n *notif) String() string {
 	return fmt.Sprintf("%s: %s: %s", n.project, n.branch, n.sha1)
 }
 
+func (n *notif) equal(o *notif) bool {
+	return n.project == o.project && n.branch == o.branch && n.sha1 == o.sha1
+}
+
 type server struct {
 	notifs chan *notif
 	conf   *config
