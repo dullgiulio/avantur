@@ -79,6 +79,10 @@ func (b *mergebot) registerBuild(req *mergereq) {
 
 func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) error {
 	ver := co.ver
+	// Not a merge, just a commit to a mergeable branch.
+	if ver.build.stage == co.stage {
+		return nil
+	}
 	log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, ver.sha1, ver.build.stage, co.stage)
 	commits := newGitcommits()
 	if ver.sha1 == "" {
