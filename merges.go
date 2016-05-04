@@ -1,4 +1,4 @@
-package main
+package umarell
 
 import (
 	"fmt"
@@ -38,17 +38,17 @@ func newCheckout(stage, dir string, ver buildver) *checkout {
 }
 
 type mergebot struct {
-	conf      *config
 	project   string
 	checkouts map[string]*checkout // stage : checkout
 	vers      map[string]*buildver // stage : version
 	reqs      chan *mergereq
+	srv       *server
 }
 
-func newMergebot(project string, cf *config) *mergebot {
+func newMergebot(project string, s *server) *mergebot {
 	b := &mergebot{
 		project:   project,
-		conf:      cf,
+		srv:       s,
 		checkouts: make(map[string]*checkout),
 		vers:      make(map[string]*buildver),
 		reqs:      make(chan *mergereq),
@@ -77,7 +77,7 @@ func (b *mergebot) registerBuild(req *mergereq) {
 	log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, req.build.stage)
 }
 
-func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) error {
+func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error {
 	ver := co.ver
 	// Not a merge, just a commit to a mergeable branch.
 	if ver.build.stage == co.stage {
@@ -101,10 +101,10 @@ func (b *mergebot) checkMerged(req *mergereq, co *checkout, pjs *projects) error
 	for k, bv := range b.vers {
 		if commits.contains(githash(bv.sha1)) {
 			log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
-			b.conf.urls.del(bv.build.stage)
+			b.srv.urls.del(bv.build.stage)
 			// As we have been called by pjs, to make a request we need to wait for the current one to finish.
 			// To avoid a deadlock, we must notify of the merge in the background.
-			go pjs.merge(bv.build, req.notif)
+			go pjs.merge(bv.build, notif)
 			merged = append(merged, k)
 		}
 	}
@@ -132,7 +132,7 @@ func (b *mergebot) doReq(req *mergereq, pjs *projects) {
 		return
 	}
 	// It's a push to a checked out stage, trigger the delete etc
-	if err := b.checkMerged(req, co, pjs); err != nil {
+	if err := b.checkMerged(req.notif, co, pjs); err != nil {
 		log.Printf("[mergebot] %s: failed merge check: %s", b.project, err)
 	}
 	co.ver.sha1 = req.notif.sha1
@@ -149,8 +149,8 @@ func (m mergebots) get(project string) *mergebot {
 	return m[project]
 }
 
-func (m mergebots) create(project string, cf *config) *mergebot {
-	b := newMergebot(project, cf)
+func (m mergebots) create(project string, s *server) *mergebot {
+	b := newMergebot(project, s)
 	m[project] = b
 	return b
 }
