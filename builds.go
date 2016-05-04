@@ -265,10 +265,12 @@ func (b *build) doReq(req *buildReq) {
 	br, err := b.execute(cmd, req)
 	if err != nil {
 		log.Printf("[build] %s: build failed: %s", req, err)
-		return
 	}
-	if err := b.persist(cmd, req, br); err != nil {
-		log.Printf("[build] %s: build persistance failed: %s", req, err)
+	// If the build failed but there is a result to save.
+	if br != nil {
+		if err := b.persist(cmd, req, br); err != nil {
+			log.Printf("[build] %s: build persistance failed: %s", req, err)
+		}
 	}
 }
 
