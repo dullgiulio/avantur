@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/dullgiulio/umarell-ci/store"
+	"github.com/dullgiulio/umarell/store"
 )
 
 type projectsAct int

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dullgiulio/umarell-ci/store"
+	"github.com/dullgiulio/umarell/store"
 )
 
 type githash []byte
