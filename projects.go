@@ -1,4 +1,4 @@
-package main
+package umarell
 
 import (
 	"fmt"
@@ -137,6 +137,7 @@ func (p *projects) run() {
 		var err error
 		switch req.act {
 		case projectsActPush:
+			log.Printf("DEBUG: %s notif %s", req.build.stage, req.notif)
 			p.notifs[req.build.stage] = req.notif
 			err = p.doPush(req)
 		case projectsActMerge:
@@ -147,12 +148,14 @@ func (p *projects) run() {
 			}
 			// We can accept a merge notification if there have been no new
 			// pushes after the merge check was first triggered.
-			if notif.equal(req.notif) {
-				err = p.doMerge(req)
-				delete(p.notifs, req.build.stage)
-			} else {
-				log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
-			}
+			log.Printf("DEBUG: %s want %s has %s", req.build.stage, req.notif, notif)
+			//if notif.equal(req.notif) {
+			err = p.doMerge(req)
+			delete(p.notifs, req.build.stage)
+			p.conf.urls.del(req.build.stage)
+			//} else {
+			//	log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
+			//}
 		}
 		if err != nil {
 			log.Printf("[project] error processing build action: %s", err)

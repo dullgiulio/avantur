@@ -1,4 +1,6 @@
-package main
+package umarell
+
+// TODO: Separate conf from interface to it
 
 import (
 	"encoding/json"
