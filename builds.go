@@ -236,7 +236,7 @@ func (b *build) execute(cmd *command, req *buildReq) (*store.BuildResult, error)
 	br, err := b.execResult(cmd)
 	log.Printf("[build] %s: done '%s'", b, cmd)
 	if err != nil {
-		return nil, fmt.Errorf("command execution failed: %s", err)
+		return br, fmt.Errorf("command execution failed: %s", err)
 	}
 	return br, nil
 }
