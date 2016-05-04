@@ -1,4 +1,4 @@
-package main
+package umarell
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ type projects struct {
 	stages map[string]*build // stage : build
 	notifs map[string]*notif // stage : notif
 	reqs   chan *projectsReq
-	conf   *config
+	srv    *server
 }
 
 type dirnotif struct {
@@ -77,24 +77,24 @@ func (b branchDirnotif) get(branch string) (*dirnotif, bool) {
 	}, false
 }
 
-func newProjects(cf *config, bots mergebots) *projects {
+func newProjects(s *server, bots mergebots) *projects {
 	pjs := &projects{
 		stages: make(map[string]*build),
 		notifs: make(map[string]*notif),
 		reqs:   make(chan *projectsReq),
-		conf:   cf,
+		srv:    s,
 	}
-	for name := range cf.Envs {
-		pjs.initProject(name, bots, cf)
+	for name := range s.conf.Envs {
+		pjs.initProject(name, bots, s)
 	}
 	go pjs.run()
 	return pjs
 }
 
-func (p *projects) initProject(name string, bots mergebots, cf *config) {
-	envcf := cf.Envs[name]
+func (p *projects) initProject(name string, bots mergebots, srv *server) {
+	envcf := srv.conf.Envs[name]
 	// Start a mergebot for this project
-	bot := bots.create(name, cf)
+	bot := bots.create(name, srv)
 	go bot.run(p)
 	// Detect the last commit for each checked-out project
 	branchNotif := newBranchDirnotif(name)
@@ -105,15 +105,15 @@ func (p *projects) initProject(name string, bots mergebots, cf *config) {
 	}
 	// Create builds for already existing static environments
 	for _, branch := range envcf.Statics {
-		if err := p.initStatic(branch, cf, bot, branchNotif); err != nil {
+		if err := p.initStatic(branch, srv, bot, branchNotif); err != nil {
 			log.Printf("[project] %s: cannot init static checkout: %s", name, err)
 		}
 	}
 }
 
-func (p *projects) initStatic(branch string, cf *config, bot *mergebot, bns *branchDirnotif) error {
+func (p *projects) initStatic(branch string, srv *server, bot *mergebot, bns *branchDirnotif) error {
 	bn, notifyMerge := bns.get(branch)
-	builds, err := newBuilds(bn.notif, cf)
+	builds, err := newBuilds(bn.notif, srv)
 	if err != nil {
 		return fmt.Errorf("cannot create build for branch %s: %s", branch, err)
 	}
@@ -137,6 +137,7 @@ func (p *projects) run() {
 		var err error
 		switch req.act {
 		case projectsActPush:
+			log.Printf("DEBUG: %s notif %s", req.build.stage, req.notif)
 			p.notifs[req.build.stage] = req.notif
 			err = p.doPush(req)
 		case projectsActMerge:
@@ -147,12 +148,14 @@ func (p *projects) run() {
 			}
 			// We can accept a merge notification if there have been no new
 			// pushes after the merge check was first triggered.
-			if notif.equal(req.notif) {
-				err = p.doMerge(req)
-				delete(p.notifs, req.build.stage)
-			} else {
-				log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
-			}
+			log.Printf("DEBUG: %s want %s has %s", req.build.stage, req.notif, notif)
+			//if notif.equal(req.notif) {
+			err = p.doMerge(req)
+			delete(p.notifs, req.build.stage)
+			p.srv.urls.del(req.build.stage)
+			//} else {
+			//	log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
+			//}
 		}
 		if err != nil {
 			log.Printf("[project] error processing build action: %s", err)
@@ -172,7 +175,7 @@ func (p *projects) merge(b *build, n *notif) {
 func (p *projects) doPush(req *projectsReq) error {
 	var act store.BuildAct
 	if existingBuild, ok := p.stages[req.build.stage]; !ok {
-		p.conf.urls.set(req.build.stage, req.build.url(reverseJenkinsURL)) // TODO: Using global here sucks.
+		p.srv.urls.set(req.build.stage, req.build.url(reverseJenkinsURL)) // TODO: Using global here sucks.
 		p.stages[req.build.stage] = req.build
 		act = store.BuildActCreate
 		go req.build.run()

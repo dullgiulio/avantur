@@ -1,8 +1,12 @@
-package main
+package umarell
 
 import (
 	"fmt"
 	"log"
+	"regexp"
+	"time"
+
+	"github.com/dullgiulio/umarell/store"
 )
 
 type notif struct {
@@ -28,29 +32,79 @@ func (n *notif) equal(o *notif) bool {
 }
 
 type server struct {
-	notifs chan *notif
-	conf   *config
+	notifs      chan *notif
+	conf        *config
+	regexBranch *regexp.Regexp
+	// Limit the number of concurrent builds that can be performed
+	limitBuilds chan struct{}
+	storage     store.Store
+	urls        *urls
 }
 
-func newServer(conf *config) *server {
-	return &server{
+func NewServer(c *config) *server {
+	s := &server{
 		notifs: make(chan *notif),
-		conf:   conf,
+		conf:   c, // TODO: Remove this
 	}
+	s.regexBranch = regexp.MustCompile(c.BranchRegexp)
+	if c.LimitBuilds > 0 {
+		s.limitBuilds = make(chan struct{}, c.LimitBuilds)
+		for i := 0; i < c.LimitBuilds; i++ {
+			s.limitBuilds <- struct{}{}
+		}
+	}
+	var err error
+	if c.Database != "" && c.Table != "" {
+		if s.storage, err = store.NewMysql(c.Database, c.Table); err != nil {
+			log.Printf("[error] cannot start database storage: %s", err)
+		}
+	}
+	if s.storage == nil {
+		log.Printf("[info] no database configured, using memory storage")
+		s.storage = store.NewMemory()
+	}
+	s.urls = newUrls()
+	if c.ResultsDuration > 0 && c.ResultsCleanup > 0 {
+		go s.cleaner(time.Duration(c.ResultsDuration), time.Duration(c.ResultsCleanup))
+	}
+	return s
 }
 
-func (s *server) serveReqs(cf *config) {
+func (s *server) ServeReqs() {
 	bots := makeMergebots()
-	pros := newProjects(cf, bots)
+	pros := newProjects(s, bots)
 
 	for n := range s.notifs {
-		s.handleNotif(cf, n, bots, pros)
+		s.handleNotif(n, bots, pros)
 	}
 }
 
-func (s *server) handleNotif(cf *config, n *notif, bots mergebots, pros *projects) {
+func (s *server) cleaner(duration, sleep time.Duration) {
+	for {
+		before := time.Now().Add(-duration)
+		log.Printf("[server] results cleaner: cleaning jobs before %s", before.Format("2006-02-01 15:04:05"))
+		if err := s.storage.Clean(before); err != nil {
+			log.Printf("[error] results cleaner: %s", err)
+		}
+		time.Sleep(sleep)
+	}
+}
+
+func (s *server) startBuild() {
+	if s.limitBuilds != nil {
+		<-s.limitBuilds
+	}
+}
+
+func (s *server) stopBuild() {
+	if s.limitBuilds != nil {
+		s.limitBuilds <- struct{}{}
+	}
+}
+
+func (s *server) handleNotif(n *notif, bots mergebots, pros *projects) {
 	log.Printf("[server] %s: handling notification", n)
-	bs, err := newBuilds(n, cf)
+	bs, err := newBuilds(n, s)
 	if err != nil {
 		log.Printf("[server] %s: no builds created: %s", n, err)
 		return

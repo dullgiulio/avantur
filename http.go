@@ -1,4 +1,4 @@
-package main
+package umarell
 
 import (
 	"fmt"
@@ -33,7 +33,7 @@ type urlsWriter func(host string, urls []string, w http.ResponseWriter) error
 func (s *server) listHandler(wf urlsWriter) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[http] %s: serving request to read jenkins URLs", r.RemoteAddr)
-		urls := s.conf.urls.get()
+		urls := s.urls.get()
 		sort.Strings(urls)
 		host := r.Host
 		if host == "" {
@@ -70,7 +70,7 @@ func htmlWriter(host string, urls []string, w http.ResponseWriter) error {
 	return nil
 }
 
-func (s *server) serveHTTP(listen string) {
+func (s *server) ServeHTTP(listen string) {
 	r := mux.NewRouter()
 	r.HandleFunc("/_/text", s.listHandler(textWriter))
 	r.HandleFunc("/_/html", s.listHandler(htmlWriter))

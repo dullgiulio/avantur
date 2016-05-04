@@ -1,11 +1,13 @@
-package main
+package umarell
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,13 +48,13 @@ func newCommand(act store.BuildAct, b *build) *command {
 	var cmd []string
 	switch act {
 	case store.BuildActCreate:
-		cmd = b.conf.Commands.CmdCreate
+		cmd = b.srv.conf.Commands.CmdCreate
 	case store.BuildActChange:
-		cmd = b.conf.Commands.CmdChange
+		cmd = b.srv.conf.Commands.CmdChange
 	case store.BuildActUpdate:
-		cmd = b.conf.Commands.CmdUpdate
+		cmd = b.srv.conf.Commands.CmdUpdate
 	case store.BuildActDestroy:
-		cmd = b.conf.Commands.CmdDestroy
+		cmd = b.srv.conf.Commands.CmdDestroy
 	}
 	if len(cmd) == 0 {
 		return nil
@@ -123,19 +125,27 @@ func (r *buildReq) wait() {
 	<-r.doneCh
 }
 
+func parseTicketNo(srv *server, branch string) (int64, error) {
+	groups := srv.regexBranch.FindAllStringSubmatch(branch, -1)
+	if len(groups) > 0 && len(groups[0]) > 1 {
+		return strconv.ParseInt(groups[0][1], 10, 64)
+	}
+	return 0, errors.New("could not match against regexp")
+}
+
 type build struct {
 	project   string
 	stage     string
 	branch    string
 	sha1      string
 	ticketNo  int64
-	conf      *config
 	reqs      chan *buildReq
 	stageVars vars
+	srv       *server
 }
 
-func newBuilds(n *notif, conf *config) ([]*build, error) {
-	procf, ok := conf.Envs[n.project]
+func newBuilds(n *notif, srv *server) ([]*build, error) {
+	procf, ok := srv.conf.Envs[n.project]
 	if !ok {
 		return nil, fmt.Errorf("project %s not configured", n.project)
 	}
@@ -150,7 +160,7 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 		if len(tmpls) == 0 {
 			return nil, fmt.Errorf("project %s does not specify a __default__ template", n.project)
 		}
-		ticketNo, err = conf.parseTicketNo(n.branch)
+		ticketNo, err = parseTicketNo(srv, n.branch)
 		if err != nil {
 			return nil, fmt.Errorf("extrating ticket number: %s", err)
 		}
@@ -164,9 +174,9 @@ func newBuilds(n *notif, conf *config) ([]*build, error) {
 			project:  n.project,
 			branch:   n.branch,
 			sha1:     n.sha1,
-			conf:     conf,
+			srv:      srv,
 			ticketNo: ticketNo,
-			reqs:     make(chan *buildReq), // TODO: can be buffered
+			reqs:     make(chan *buildReq), // XXX: can be buffered
 		}
 		b.initVars(n.project, tmpl)
 		bs = append(bs, b)
@@ -205,7 +215,7 @@ func (b *build) initVars(project, tmpl string) {
 }
 
 func (b *build) execResult(c *command) (*store.BuildResult, error) {
-	return execResult(c.cmd, time.Duration(b.conf.CommandTimeout))
+	return execResult(c.cmd, time.Duration(b.srv.conf.CommandTimeout))
 }
 
 func (b *build) prepare(req *buildReq) {
@@ -239,7 +249,7 @@ func (b *build) persist(cmd *command, req *buildReq, br *store.BuildResult) erro
 	br.SHA1 = req.notif.sha1
 	br.Stage = b.stage
 	br.Ticket = b.ticketNo
-	if err := b.conf.storage.Add(br); err != nil {
+	if err := b.srv.storage.Add(br); err != nil {
 		return fmt.Errorf("cannot persist build result: %s", err)
 	}
 	return nil
@@ -264,14 +274,9 @@ func (b *build) doReq(req *buildReq) {
 
 func (b *build) run() {
 	for req := range b.reqs {
-		// Global builds concurrency semaphore
-		if b.conf.limitBuilds != nil {
-			<-b.conf.limitBuilds
-		}
+		b.srv.startBuild()
 		b.doReq(req)
-		if b.conf.limitBuilds != nil {
-			b.conf.limitBuilds <- struct{}{}
-		}
+		b.srv.stopBuild()
 		req.done()
 	}
 	log.Printf("[build] %s: terminated", b)
