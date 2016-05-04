@@ -12,12 +12,12 @@ func main() {
 	flag.Parse()
 	conffile := flag.Arg(0)
 
-	cfg, err := newConfig(conffile)
+	cfg, err := umarell.NewConfig(conffile)
 	if err != nil {
 		log.Fatal("configuration file failed to load: ", err)
 	}
-	srv := newServer(cfg)
-	go srv.serveReqs(cfg)
+	srv := umarell.NewServer(cfg)
+	go srv.ServeReqs(cfg)
 	log.Printf("Listening to port %s", *listen)
-	srv.serveHTTP(*listen)
+	srv.ServeHTTP(*listen)
 }

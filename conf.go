@@ -59,7 +59,7 @@ type config struct {
 	urls        *urls
 }
 
-func newConfig(fname string) (*config, error) {
+func NewConfig(fname string) (*config, error) {
 	file, err := ioutil.ReadFile(fname)
 	if err != nil {
 		return nil, err

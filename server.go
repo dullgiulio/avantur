@@ -32,14 +32,14 @@ type server struct {
 	conf   *config
 }
 
-func newServer(conf *config) *server {
+func NewServer(conf *config) *server {
 	return &server{
 		notifs: make(chan *notif),
 		conf:   conf,
 	}
 }
 
-func (s *server) serveReqs(cf *config) {
+func (s *server) ServeReqs(cf *config) {
 	bots := makeMergebots()
 	pros := newProjects(cf, bots)
 

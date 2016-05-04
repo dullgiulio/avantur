@@ -70,7 +70,7 @@ func htmlWriter(host string, urls []string, w http.ResponseWriter) error {
 	return nil
 }
 
-func (s *server) serveHTTP(listen string) {
+func (s *server) ServeHTTP(listen string) {
 	r := mux.NewRouter()
 	r.HandleFunc("/_/text", s.listHandler(textWriter))
 	r.HandleFunc("/_/html", s.listHandler(htmlWriter))
