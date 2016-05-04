@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dullgiulio/umarell-ci/store"
+	"github.com/dullgiulio/umarell/store"
 )
 
 type duration time.Duration
