@@ -1,7 +1,5 @@
 package umarell
 
-// TODO: Separate conf from interface to it
-
 import (
 	"encoding/json"
 	"io/ioutil"
@@ -46,6 +44,73 @@ type config struct {
 		Statics  []string            `json:"staticBranches"`
 		Merges   map[string]string   `json:"merges"` // branch : dir
 	} `json:"environments"`
+}
+
+func (c *config) GetBranchRegexp() string {
+	return c.BranchRegexp
+}
+
+func (c *config) GetWorkspacesDir() string {
+	return c.WorkspacesDir
+}
+
+func (c *config) GetCmdChange() []string {
+	return c.Commands.CmdChange
+}
+
+func (c *config) GetCmdCreate() []string {
+	return c.Commands.CmdCreate
+}
+
+func (c *config) GetCmdUpdate() []string {
+	return c.Commands.CmdUpdate
+}
+
+func (c *config) GetCmdDestroy() []string {
+	return c.Commands.CmdDestroy
+}
+
+func (c *config) GetCommandTimeout() duration {
+	return c.CommandTimeout
+}
+
+func (c *config) GetEnvNames() []string {
+	names := make([]string, len(c.Envs))
+	i := 0
+	for k := range c.Envs {
+		names[i] = k
+	}
+	return names
+}
+
+func (c *config) HasEnv(name string) bool {
+	_, ok := c.Envs[name]
+	return ok
+}
+
+func (c *config) SetEnvProperty(prop, key, val string) error {
+	parts := strings.Split(prop, ".", -1)
+	if len(parts) < 3 {
+		return errors.New("invalid property to set")
+	}
+	envName := parts[0]
+	if _, ok := c.Envs[envName]; !ok {
+		return errors.New(fmt.Sprintf("non-existing project %s", envName))
+	}
+	switch parts[1] {
+	case "branches":
+		b := c.Env[envName].Branches[key]
+		b = append(b, val)
+		c.Env[envName].Branches[key] = b
+	case "merges":
+		c.Env[envName].Merges[key] = val
+	default:
+		return errors.New(fmt.Sprintf("invalid property %s to set", parts[1]))
+	}
+	return nil
+}
+
+func (c *config) Get() {
 }
 
 func NewConfigJSONFile(fname string) (*config, error) {
