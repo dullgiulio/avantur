@@ -95,17 +95,22 @@ func (c *config) SetEnvProperty(prop, key, val string) error {
 	}
 	envName := parts[0]
 	if _, ok := c.Envs[envName]; !ok {
-		return errors.New(fmt.Sprintf("non-existing project %s", envName))
+		return fmt.Errorf("non-existing project %s", envName)
 	}
 	switch parts[1] {
 	case "branches":
 		b := c.Env[envName].Branches[key]
+		for i := range b {
+			if b[i] == val {
+				return fmt.Errorf("cannot insert %s into %s.branches: already existing", val, envName)
+			}
+		}
 		b = append(b, val)
 		c.Env[envName].Branches[key] = b
 	case "merges":
 		c.Env[envName].Merges[key] = val
 	default:
-		return errors.New(fmt.Sprintf("invalid property %s to set", parts[1]))
+		return fmt.Errorf("invalid property %s to set", parts[1])
 	}
 	return nil
 }
