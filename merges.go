@@ -79,11 +79,6 @@ func (b *mergebot) registerBuild(req *mergereq) {
 
 func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error {
 	ver := co.ver
-	// Not a merge, just a commit to a mergeable branch.
-	if ver.build.stage == co.stage {
-		log.Printf("[mergebot] %s: direct commit to %s ignored", b.project, ver.build.stage)
-		return nil
-	}
 	// Do not attempt to merge a checked out stage.
 	if _, ok := b.checkouts[ver.build.stage]; ok {
 		log.Printf("[mergebot] %s: merge to %s ignored", b.project, ver.build.stage)
