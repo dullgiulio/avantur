@@ -79,11 +79,6 @@ func (b *mergebot) registerBuild(req *mergereq) {
 
 func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error {
 	ver := co.ver
-	// Do not attempt to merge a checked out stage.
-	if _, ok := b.checkouts[ver.build.stage]; ok {
-		log.Printf("[mergebot] %s: merge to %s ignored", b.project, ver.build.stage)
-		return nil
-	}
 	log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, ver.sha1, ver.build.stage, co.stage)
 	commits := newGitcommits()
 	if ver.sha1 == "" {
@@ -94,6 +89,11 @@ func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error 
 	}
 	merged := make([]string, 0) // merged stages to remove
 	for k, bv := range b.vers {
+		// Do not attempt to remove a checked-out stage.
+		if _, ok := b.checkouts[bv.build.stage]; ok {
+			log.Printf("[mergebot] %s: merge to %s ignored", b.project, bv.build.stage)
+			continue
+		}
 		if commits.contains(githash(bv.sha1)) {
 			log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
 			b.srv.urls.del(bv.build.stage)
