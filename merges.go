@@ -42,6 +42,7 @@ type mergebot struct {
 	checkouts map[string]*checkout // stage : checkout
 	vers      map[string]*buildver // stage : version
 	reqs      chan *mergereq
+	dels      chan string // stage
 	srv       *server
 }
 
@@ -52,6 +53,7 @@ func newMergebot(project string, s *server) *mergebot {
 		checkouts: make(map[string]*checkout),
 		vers:      make(map[string]*buildver),
 		reqs:      make(chan *mergereq),
+		dels:      make(chan string),
 	}
 	return b
 }
@@ -99,7 +101,7 @@ func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error 
 			b.srv.urls.del(bv.build.stage)
 			// As we have been called by pjs, to make a request we need to wait for the current one to finish.
 			// To avoid a deadlock, we must notify of the merge in the background.
-			go pjs.merge(bv.build, notif)
+			go pjs.destroy(bv.build, notif)
 			merged = append(merged, k)
 		}
 	}
@@ -109,13 +111,22 @@ func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error 
 	return nil
 }
 
+func (b *mergebot) destroy(stage string) {
+	b.dels <- stage
+}
+
 func (b *mergebot) send(req *mergereq) {
 	b.reqs <- req
 }
 
 func (b *mergebot) run(pjs *projects) {
-	for req := range b.reqs {
-		b.doReq(req, pjs)
+	for {
+		select {
+		case req := <-b.reqs:
+			b.doReq(req, pjs)
+		case stage := <-b.dels:
+			delete(b.vers, stage)
+		}
 	}
 }
 

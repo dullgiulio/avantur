@@ -9,17 +9,26 @@ import (
 	"github.com/dullgiulio/umarell/store"
 )
 
+type notifType int
+
+const (
+	notifPush notifType = iota
+	notifDelete
+)
+
 type notif struct {
 	project string
 	sha1    string
 	branch  string
+	ntype   notifType
 }
 
-func newNotif(project, sha1, branch string) *notif {
+func newNotif(project, sha1, branch string, ntype notifType) *notif {
 	return &notif{
 		project: project,
 		sha1:    sha1,
 		branch:  branch,
+		ntype:   ntype,
 	}
 }
 
@@ -115,6 +124,12 @@ func (s *server) handleNotif(n *notif, bots mergebots, pros *projects) {
 		return
 	}
 	for _, b := range bs {
-		pros.push(b, n, bot)
+		switch n.ntype {
+		case notifPush:
+			pros.push(b, n, bot)
+		case notifDelete:
+			pros.destroy(b, n)
+			bot.destroy(b.stage)
+		}
 	}
 }

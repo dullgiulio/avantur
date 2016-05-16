@@ -11,7 +11,7 @@ type projectsAct int
 
 const (
 	projectsActPush projectsAct = iota
-	projectsActMerge
+	projectsActDestroy
 )
 
 type projectsReq struct {
@@ -61,7 +61,7 @@ func (b *branchDirnotif) add(branch, dir string) error {
 		return fmt.Errorf("cannot detect last commit for branch %s dir %s: %s", branch, dir, err)
 	}
 	b.entries[branch] = &dirnotif{
-		notif: newNotif(b.name, string(git.commits[0].hash), branch),
+		notif: newNotif(b.name, string(git.commits[0].hash), branch, notifPush),
 		dir:   dir,
 	}
 	return nil
@@ -73,7 +73,7 @@ func (b branchDirnotif) get(branch string) (*dirnotif, bool) {
 		return bn, true
 	}
 	return &dirnotif{
-		notif: newNotif(b.name, "", branch),
+		notif: newNotif(b.name, "", branch, notifPush),
 	}, false
 }
 
@@ -140,7 +140,7 @@ func (p *projects) run() {
 			log.Printf("DEBUG: %s notif %s", req.build.stage, req.notif)
 			p.notifs[req.build.stage] = req.notif
 			err = p.doPush(req)
-		case projectsActMerge:
+		case projectsActDestroy:
 			notif, ok := p.notifs[req.build.stage]
 			if !ok {
 				log.Printf("[project] skipping ghost merge request for %s", req.build.stage)
@@ -150,7 +150,7 @@ func (p *projects) run() {
 			// pushes after the merge check was first triggered.
 			log.Printf("DEBUG: %s want %s has %s", req.build.stage, req.notif, notif)
 			//if notif.equal(req.notif) {
-			err = p.doMerge(req)
+			err = p.doDestroy(req)
 			delete(p.notifs, req.build.stage)
 			p.srv.urls.del(req.build.stage)
 			//} else {
@@ -167,8 +167,8 @@ func (p *projects) push(b *build, n *notif, bot *mergebot) {
 	p.reqs <- newProjectsReq(projectsActPush, b, n, bot)
 }
 
-func (p *projects) merge(b *build, n *notif) {
-	p.reqs <- newProjectsReq(projectsActMerge, b, n, nil)
+func (p *projects) destroy(b *build, n *notif) {
+	p.reqs <- newProjectsReq(projectsActDestroy, b, n, nil)
 }
 
 // A branch has been pushed: create env or deploy to existing
@@ -189,7 +189,7 @@ func (p *projects) doPush(req *projectsReq) error {
 	return nil
 }
 
-func (p *projects) doMerge(req *projectsReq) error {
+func (p *projects) doDestroy(req *projectsReq) error {
 	stage := req.build.stage
 	log.Printf("[project] remove build stage %s", stage)
 	build, ok := p.stages[stage]

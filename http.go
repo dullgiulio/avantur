@@ -24,8 +24,23 @@ func (s *server) jenkinsHandler(w http.ResponseWriter, r *http.Request) {
 	sha1 := url["sha1"]
 
 	log.Printf("[jenkins] project %s: branch %s: notified commit %s", project, branches[0], sha1[0])
-	s.notifs <- newNotif(project, sha1[0], branches[0])
+	s.notifs <- newNotif(project, sha1[0], branches[0], notifPush)
 	fmt.Fprintf(w, "Scheduled this %s job for ya!", project)
+}
+
+func (s *server) deleteHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	project := vars["project"]
+	url := r.URL.Query()
+
+	branches, ok := url["branches"]
+	if !ok {
+		fmt.Fprintf(w, "You must specify the branch to remove with '?branches=<branch>'")
+		return
+	}
+
+	s.notifs <- newNotif(project, "", branches[0], notifDelete)
+	fmt.Fprintf(w, "Deletion of %s, branch %s underway", project, branches[0])
 }
 
 type urlsWriter func(host string, urls []string, w http.ResponseWriter) error
@@ -74,6 +89,7 @@ func (s *server) ServeHTTP(listen string) {
 	r := mux.NewRouter()
 	r.HandleFunc("/_/text", s.listHandler(textWriter))
 	r.HandleFunc("/_/html", s.listHandler(htmlWriter))
+	r.HandleFunc("/{project}/delete", s.deleteHandler)
 	r.HandleFunc("/{project}/jenkins/git/notifyCommit", s.jenkinsHandler)
 	log.Fatal(http.ListenAndServe(listen, r))
 }
