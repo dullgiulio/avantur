@@ -132,7 +132,7 @@ func (s *server) handleNotif(n *notif, bots mergebots, pros *projects) {
 		case notifPush:
 			pros.push(b, n, bot)
 		case notifDelete:
-			pros.destroy(b, n)
+			pros.destroy(b, n, -1)
 			bot.destroy(b.stage)
 		}
 	}

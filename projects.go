@@ -23,20 +23,22 @@ type projectsReq struct {
 	build *build
 	notif *notif
 	bot   *mergebot
+	token int64
 }
 
-func newProjectsReq(act projectsAct, b *build, n *notif, bot *mergebot) *projectsReq {
+func newProjectsReq(act projectsAct, b *build, n *notif, token int64, bot *mergebot) *projectsReq {
 	return &projectsReq{
 		act:   act,
 		build: b,
 		notif: n,
 		bot:   bot,
+		token: token,
 	}
 }
 
 type projects struct {
 	stages map[string]*build // stage : build
-	notifs map[string]*notif // stage : notif
+	tokens map[string]int64  // stage : number incremented at every deployment
 	reqs   chan *projectsReq
 	srv    *server
 }
@@ -84,7 +86,7 @@ func (b branchDirnotif) get(branch string) (*dirnotif, bool) {
 func newProjects(s *server, bots mergebots) *projects {
 	pjs := &projects{
 		stages: make(map[string]*build),
-		notifs: make(map[string]*notif),
+		tokens: make(map[string]int64),
 		reqs:   make(chan *projectsReq),
 		srv:    s,
 	}
@@ -141,25 +143,26 @@ func (p *projects) run() {
 		var err error
 		switch req.act {
 		case projectsActPush:
-			log.Printf("DEBUG: %s notif %s", req.build.stage, req.notif)
-			p.notifs[req.build.stage] = req.notif
+			p.tokens[req.build.stage]++
 			err = p.doPush(req)
 		case projectsActDestroy:
-			notif, ok := p.notifs[req.build.stage]
+			token, ok := p.tokens[req.build.stage]
 			if !ok {
 				log.Printf("[project] skipping ghost merge request for %s", req.build.stage)
 				continue
 			}
 			// We can accept a merge notification if there have been no new
 			// pushes after the merge check was first triggered.
-			log.Printf("DEBUG: %s want %s has %s", req.build.stage, req.notif, notif)
-			//if notif.equal(req.notif) {
-			err = p.doDestroy(req)
-			delete(p.notifs, req.build.stage)
-			p.srv.urls.del(req.build.stage)
-			//} else {
-			//	log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
-			//}
+			//
+			// A negative request token means the user triggered the destroy
+			// directly, we ignore possible damage caused by this action.
+			if req.token < 0 || token <= req.token {
+				err = p.doDestroy(req)
+				delete(p.tokens, req.build.stage)
+				p.srv.urls.del(req.build.stage)
+			} else {
+				log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
+			}
 		}
 		if err != nil {
 			log.Printf("[project] error processing build action: %s", err)
@@ -168,11 +171,11 @@ func (p *projects) run() {
 }
 
 func (p *projects) push(b *build, n *notif, bot *mergebot) {
-	p.reqs <- newProjectsReq(projectsActPush, b, n, bot)
+	p.reqs <- newProjectsReq(projectsActPush, b, n, 0, bot)
 }
 
-func (p *projects) destroy(b *build, n *notif) {
-	p.reqs <- newProjectsReq(projectsActDestroy, b, n, nil)
+func (p *projects) destroy(b *build, n *notif, token int64) {
+	p.reqs <- newProjectsReq(projectsActDestroy, b, n, token, nil)
 }
 
 // A branch has been pushed: create env or deploy to existing
@@ -189,7 +192,7 @@ func (p *projects) doPush(req *projectsReq) error {
 		req.build = existingBuild
 	}
 	req.build.request(act, req.notif)
-	req.bot.send(newMergereq(req.notif, req.build))
+	req.bot.send(newMergereq(req.notif, req.token, req.build))
 	return nil
 }
 

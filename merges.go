@@ -18,12 +18,14 @@ type buildver struct {
 type mergereq struct {
 	notif *notif
 	build *build
+	token int64
 }
 
-func newMergereq(notif *notif, build *build) *mergereq {
+func newMergereq(notif *notif, token int64, build *build) *mergereq {
 	return &mergereq{
 		notif: notif,
 		build: build,
+		token: token,
 	}
 }
 
@@ -83,7 +85,7 @@ func (b *mergebot) registerBuild(req *mergereq) {
 	log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, req.build.stage)
 }
 
-func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error {
+func (b *mergebot) checkMerged(notif *notif, token int64, co *checkout, pjs *projects) error {
 	ver := co.ver
 	log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, ver.sha1, ver.build.stage, co.stage)
 	commits := newGitcommits()
@@ -105,7 +107,7 @@ func (b *mergebot) checkMerged(notif *notif, co *checkout, pjs *projects) error 
 			b.srv.urls.del(bv.build.stage)
 			// As we have been called by pjs, to make a request we need to wait for the current one to finish.
 			// To avoid a deadlock, we must notify of the merge in the background.
-			go pjs.destroy(bv.build, notif)
+			go pjs.destroy(bv.build, notif, token)
 			merged = append(merged, k)
 		}
 	}
@@ -142,7 +144,7 @@ func (b *mergebot) doReq(req *mergereq, pjs *projects) {
 		return
 	}
 	// It's a push to a checked out stage, trigger the delete etc
-	if err := b.checkMerged(req.notif, co, pjs); err != nil {
+	if err := b.checkMerged(req.notif, req.token, co, pjs); err != nil {
 		log.Printf("[mergebot] %s: failed merge check: %s", b.project, err)
 	}
 	co.ver.sha1 = req.notif.sha1
