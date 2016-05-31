@@ -144,6 +144,7 @@ func (p *projects) run() {
 		switch req.act {
 		case projectsActPush:
 			p.tokens[req.build.stage]++
+			req.token = p.tokens[req.build.stage]
 			err = p.doPush(req)
 		case projectsActDestroy:
 			token, ok := p.tokens[req.build.stage]
