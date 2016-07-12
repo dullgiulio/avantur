@@ -6,7 +6,6 @@ package umarell
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 
@@ -27,7 +26,7 @@ func (s *server) jenkinsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sha1 := url["sha1"]
 
-	log.Printf("[jenkins] project %s: branch %s: notified commit %s", project, branches[0], sha1[0])
+	s.log.Printf("[jenkins] project %s: branch %s: notified commit %s", project, branches[0], sha1[0])
 	s.notifs <- newNotif(project, sha1[0], branches[0], notifPush)
 	fmt.Fprintf(w, "Scheduled this %s job for ya!", project)
 }
@@ -51,7 +50,7 @@ type urlsWriter func(host string, urls []string, w http.ResponseWriter) error
 
 func (s *server) listHandler(wf urlsWriter) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("[http] %s: serving request to read jenkins URLs", r.RemoteAddr)
+		s.log.Printf("[http] %s: serving request to read jenkins URLs", r.RemoteAddr)
 		urls := s.urls.get()
 		sort.Strings(urls)
 		host := r.Host
@@ -59,7 +58,7 @@ func (s *server) listHandler(wf urlsWriter) func(http.ResponseWriter, *http.Requ
 			host = "localhost"
 		}
 		if err := wf(host, urls, w); err != nil {
-			log.Printf("[http] cannot write URLs: %s", err)
+			s.log.Printf("[http] cannot write URLs: %s", err)
 			return
 		}
 		if f, ok := w.(http.Flusher); ok {
@@ -95,5 +94,5 @@ func (s *server) ServeHTTP(listen string) {
 	r.HandleFunc("/_/html", s.listHandler(htmlWriter))
 	r.HandleFunc("/{project}/delete", s.deleteHandler)
 	r.HandleFunc("/{project}/jenkins/git/notifyCommit", s.jenkinsHandler)
-	log.Fatal(http.ListenAndServe(listen, r))
+	s.log.Fatal(http.ListenAndServe(listen, r))
 }

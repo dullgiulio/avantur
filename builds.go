@@ -7,7 +7,6 @@ package umarell
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/url"
 	"os/exec"
 	"regexp"
@@ -77,7 +76,7 @@ func (c *command) String() string {
 type branchStages map[string][]string
 
 // match returns the stage template for a branch
-func (br branchStages) match(branch string) ([]string, bool) {
+func (br branchStages) match(branch string, log logger) ([]string, bool) {
 	tmpls, ok := br[branch]
 	if ok {
 		return tmpls, true
@@ -157,7 +156,7 @@ func newBuilds(n *notif, srv *server) ([]*build, error) {
 		ticketNo int64
 		err      error
 	)
-	tmpls, matched := branchStages(procf.Branches).match(n.branch)
+	tmpls, matched := branchStages(procf.Branches).match(n.branch, srv.log)
 	// If it is not a special stage, we can get the ticket number
 	if !matched {
 		tmpls = procf.Branches["__default__"]
@@ -236,9 +235,9 @@ func (b *build) prepare(req *buildReq) {
 
 func (b *build) execute(cmd *command, req *buildReq) (*store.BuildResult, error) {
 	// Run the actual build command
-	log.Printf("[build] %s: start '%s'", b, cmd)
+	b.srv.log.Printf("[build] %s: start '%s'", b, cmd)
 	br, err := b.execResult(cmd)
-	log.Printf("[build] %s: done '%s'", b, cmd)
+	b.srv.log.Printf("[build] %s: done '%s'", b, cmd)
 	if err != nil {
 		return br, fmt.Errorf("command execution failed: %s", err)
 	}
@@ -263,17 +262,17 @@ func (b *build) doReq(req *buildReq) {
 	b.prepare(req)
 	cmd := newCommand(req.act, b)
 	if cmd == nil {
-		log.Printf("[build] %s: nothing to do", req)
+		b.srv.log.Printf("[build] %s: nothing to do", req)
 		return
 	}
 	br, err := b.execute(cmd, req)
 	if err != nil {
-		log.Printf("[build] %s: build failed: %s", req, err)
+		b.srv.log.Printf("[build] %s: build failed: %s", req, err)
 	}
 	// If the build failed but there is a result to save.
 	if br != nil {
 		if err := b.persist(cmd, req, br); err != nil {
-			log.Printf("[build] %s: build persistance failed: %s", req, err)
+			b.srv.log.Printf("[build] %s: build persistance failed: %s", req, err)
 		}
 	}
 }
@@ -285,7 +284,7 @@ func (b *build) run() {
 		b.srv.stopBuild()
 		req.done()
 	}
-	log.Printf("[build] %s: terminated", b)
+	b.srv.log.Printf("[build] %s: terminated", b)
 }
 
 func (b *build) request(act store.BuildAct, n *notif) {

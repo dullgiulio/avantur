@@ -6,7 +6,6 @@ package umarell
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"time"
 
@@ -52,12 +51,14 @@ type server struct {
 	limitBuilds chan struct{}
 	storage     store.Store
 	urls        *urls
+	log         logger
 }
 
 func NewServer(c *config) *server {
 	s := &server{
 		notifs: make(chan *notif),
-		conf:   c, // TODO: Remove this
+		conf:   c,
+		log:    newStdLogger(),
 	}
 	s.regexBranch = regexp.MustCompile(c.BranchRegexp)
 	if c.LimitBuilds > 0 {
@@ -69,11 +70,11 @@ func NewServer(c *config) *server {
 	var err error
 	if c.Database != "" && c.Table != "" {
 		if s.storage, err = store.NewMysql(c.Database, c.Table); err != nil {
-			log.Printf("[error] cannot start database storage: %s", err)
+			s.log.Printf("[error] cannot start database storage: %s", err)
 		}
 	}
 	if s.storage == nil {
-		log.Printf("[info] no database configured, using memory storage")
+		s.log.Printf("[info] no database configured, using memory storage")
 		s.storage = store.NewMemory()
 	}
 	s.urls = newUrls()
@@ -95,9 +96,9 @@ func (s *server) ServeReqs() {
 func (s *server) cleaner(duration, sleep time.Duration) {
 	for {
 		before := time.Now().Add(-duration)
-		log.Printf("[server] results cleaner: cleaning jobs before %s", before.Format("2006-02-01 15:04:05"))
+		s.log.Printf("[server] results cleaner: cleaning jobs before %s", before.Format("2006-02-01 15:04:05"))
 		if err := s.storage.Clean(before); err != nil {
-			log.Printf("[error] results cleaner: %s", err)
+			s.log.Printf("[error] results cleaner: %s", err)
 		}
 		time.Sleep(sleep)
 	}
@@ -116,15 +117,15 @@ func (s *server) stopBuild() {
 }
 
 func (s *server) handleNotif(n *notif, bots mergebots, pros *projects) {
-	log.Printf("[server] %s: handling notification", n)
+	s.log.Printf("[server] %s: handling notification", n)
 	bs, err := newBuilds(n, s)
 	if err != nil {
-		log.Printf("[server] %s: no builds created: %s", n, err)
+		s.log.Printf("[server] %s: no builds created: %s", n, err)
 		return
 	}
 	bot := bots.get(n.project)
 	if bot == nil {
-		log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
+		s.log.Printf("[server] no mergebot found for %s, skipping build push", n.project)
 		return
 	}
 	for _, b := range bs {

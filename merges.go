@@ -6,7 +6,6 @@ package umarell
 
 import (
 	"fmt"
-	"log"
 )
 
 type buildver struct {
@@ -70,7 +69,7 @@ func (b *mergebot) addCheckout(dir string, notif *notif, build *build) {
 		build: build,
 	}
 	b.checkouts[build.stage] = newCheckout(build.stage, dir, bv)
-	log.Printf("[mergebot] %s: init %s to %s using stage %s", b.project, notif.branch, notif.sha1, build.stage)
+	b.srv.log.Printf("[mergebot] %s: init %s to %s using stage %s", b.project, notif.branch, notif.sha1, build.stage)
 }
 
 func (b *mergebot) registerBuild(req *mergereq) {
@@ -82,12 +81,12 @@ func (b *mergebot) registerBuild(req *mergereq) {
 	}
 	bv.sha1 = req.notif.sha1
 	b.vers[req.build.stage] = bv
-	log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, req.build.stage)
+	b.srv.log.Printf("[mergebot] %s: set latest revision to %s stage %s", b.project, req.notif.sha1, req.build.stage)
 }
 
 func (b *mergebot) checkMerged(notif *notif, token int64, co *checkout, pjs *projects) error {
 	ver := co.ver
-	log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, ver.sha1, ver.build.stage, co.stage)
+	b.srv.log.Printf("[mergebot] %s: checking that %s from %s has been merged to %s", b.project, ver.sha1, ver.build.stage, co.stage)
 	commits := newGitcommits()
 	if ver.sha1 == "" {
 		return fmt.Errorf("cannot fetch commits since last build, last SHA1 is empty", b.project)
@@ -99,11 +98,11 @@ func (b *mergebot) checkMerged(notif *notif, token int64, co *checkout, pjs *pro
 	for k, bv := range b.vers {
 		// Do not attempt to remove a checked-out stage.
 		if _, ok := b.checkouts[bv.build.stage]; ok {
-			log.Printf("[mergebot] %s: merge to %s ignored", b.project, bv.build.stage)
+			b.srv.log.Printf("[mergebot] %s: merge to %s ignored", b.project, bv.build.stage)
 			continue
 		}
 		if commits.contains(githash(bv.sha1)) {
-			log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
+			b.srv.log.Printf("[mergebot] %s: can remove env %s, it was merged", b.project, bv.build.stage)
 			b.srv.urls.del(bv.build.stage)
 			// As we have been called by pjs, to make a request we need to wait for the current one to finish.
 			// To avoid a deadlock, we must notify of the merge in the background.
@@ -145,10 +144,10 @@ func (b *mergebot) doReq(req *mergereq, pjs *projects) {
 	}
 	// It's a push to a checked out stage, trigger the delete etc
 	if err := b.checkMerged(req.notif, req.token, co, pjs); err != nil {
-		log.Printf("[mergebot] %s: failed merge check: %s", b.project, err)
+		b.srv.log.Printf("[mergebot] %s: failed merge check: %s", b.project, err)
 	}
 	co.ver.sha1 = req.notif.sha1
-	log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, co.ver.build.stage)
+	b.srv.log.Printf("[mergebot] %s: merge check done, set latest revision to %s stage %s", b.project, req.notif.sha1, co.ver.build.stage)
 }
 
 type mergebots map[string]*mergebot // project : mergebots

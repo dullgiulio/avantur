@@ -6,7 +6,6 @@ package umarell
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/dullgiulio/umarell/store"
 )
@@ -62,7 +61,6 @@ func newBranchDirnotif(name string) *branchDirnotif {
 
 func (b *branchDirnotif) add(branch, dir string) error {
 	git := newGitcommits()
-	log.Printf("[project] getting last commit for branch %s in %s", branch, dir)
 	if err := git.last(1, dir); err != nil {
 		return fmt.Errorf("cannot detect last commit for branch %s dir %s: %s", branch, dir, err)
 	}
@@ -105,14 +103,15 @@ func (p *projects) initProject(name string, bots mergebots, srv *server) {
 	// Detect the last commit for each checked-out project
 	branchNotif := newBranchDirnotif(name)
 	for branch, dir := range envcf.Merges {
+		p.srv.log.Printf("[project] getting last commit for branch %s in %s", branch, dir)
 		if err := branchNotif.add(branch, dir); err != nil {
-			log.Printf("[project] %s: error initializing checked-out project: %s", name, err)
+			p.srv.log.Printf("[project] %s: error initializing checked-out project: %s", name, err)
 		}
 	}
 	// Create builds for already existing static environments
 	for _, branch := range envcf.Statics {
 		if err := p.initStatic(branch, srv, bot, branchNotif); err != nil {
-			log.Printf("[project] %s: cannot init static checkout: %s", name, err)
+			p.srv.log.Printf("[project] %s: cannot init static checkout: %s", name, err)
 		}
 	}
 }
@@ -129,7 +128,7 @@ func (p *projects) initStatic(branch string, srv *server, bot *mergebot, bns *br
 	for _, b := range builds {
 		p.stages[b.stage] = b
 		go b.run()
-		log.Printf("[project] added stage %s tracking %s", b.stage, branch)
+		p.srv.log.Printf("[project] added stage %s tracking %s", b.stage, branch)
 	}
 	// Notify the merge detector that this is the current build and notif for this directory
 	if notifyMerge {
@@ -149,7 +148,7 @@ func (p *projects) run() {
 		case projectsActDestroy:
 			token, ok := p.tokens[req.build.stage]
 			if !ok {
-				log.Printf("[project] skipping ghost merge request for %s", req.build.stage)
+				p.srv.log.Printf("[project] skipping ghost merge request for %s", req.build.stage)
 				continue
 			}
 			// We can accept a merge notification if there have been no new
@@ -162,11 +161,11 @@ func (p *projects) run() {
 				delete(p.tokens, req.build.stage)
 				p.srv.urls.del(req.build.stage)
 			} else {
-				log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
+				p.srv.log.Printf("[project] ignoring merge request for %s as it is not up-to-date", req.build.stage)
 			}
 		}
 		if err != nil {
-			log.Printf("[project] error processing build action: %s", err)
+			p.srv.log.Printf("[project] error processing build action: %s", err)
 		}
 	}
 }
@@ -199,7 +198,7 @@ func (p *projects) doPush(req *projectsReq) error {
 
 func (p *projects) doDestroy(req *projectsReq) error {
 	stage := req.build.stage
-	log.Printf("[project] remove build stage %s", stage)
+	p.srv.log.Printf("[project] remove build stage %s", stage)
 	build, ok := p.stages[stage]
 	if !ok {
 		return fmt.Errorf("unknown stage %s merged", stage)
