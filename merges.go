@@ -44,6 +44,7 @@ func newCheckout(stage, dir string, ver buildver) *checkout {
 
 type mergebot struct {
 	project   string
+	norem     map[string]struct{}  // stages that cannot be removed
 	checkouts map[string]*checkout // stage : checkout
 	vers      map[string]*buildver // stage : version
 	reqs      chan *mergereq
@@ -55,12 +56,17 @@ func newMergebot(project string, s *server) *mergebot {
 	b := &mergebot{
 		project:   project,
 		srv:       s,
+		norem:     make(map[string]struct{}),
 		checkouts: make(map[string]*checkout),
 		vers:      make(map[string]*buildver),
 		reqs:      make(chan *mergereq),
 		dels:      make(chan string),
 	}
 	return b
+}
+
+func (b *mergebot) addUnremovable(stage string) {
+	b.norem[stage] = struct{}{}
 }
 
 func (b *mergebot) addCheckout(dir string, notif *notif, build *build) {
@@ -97,7 +103,7 @@ func (b *mergebot) checkMerged(notif *notif, token int64, co *checkout, pjs *pro
 	merged := make([]string, 0) // merged stages to remove
 	for k, bv := range b.vers {
 		// Do not attempt to remove a checked-out stage.
-		if _, ok := b.checkouts[bv.build.stage]; ok {
+		if _, ok := b.norem[bv.build.stage]; ok {
 			b.srv.log.Printf("[mergebot] %s: merge to %s ignored", b.project, bv.build.stage)
 			continue
 		}

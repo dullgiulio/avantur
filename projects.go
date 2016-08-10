@@ -129,6 +129,7 @@ func (p *projects) initStatic(branch string, srv *server, bot *mergebot, bns *br
 		p.stages[b.stage] = b
 		go b.run()
 		p.srv.log.Printf("[project] added stage %s tracking %s", b.stage, branch)
+		bot.addUnremovable(b.stage)
 	}
 	// Notify the merge detector that this is the current build and notif for this directory
 	if notifyMerge {
