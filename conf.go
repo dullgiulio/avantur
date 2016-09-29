@@ -49,6 +49,12 @@ type config struct {
 		Branches map[string][]string `json:"branches"`
 		Statics  []string            `json:"staticBranches"`
 		Merges   map[string]string   `json:"merges"` // branch : dir
+		Commands *struct {
+			CmdChange  []string `json:"change"`
+			CmdCreate  []string `json:"create"`
+			CmdUpdate  []string `json:"update"`
+			CmdDestroy []string `json:"destroy"`
+		} `json:"commands"`
 	} `json:"environments"`
 }
 

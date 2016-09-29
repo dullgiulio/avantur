@@ -51,13 +51,13 @@ func newCommand(act store.BuildAct, b *build) *command {
 	var cmd []string
 	switch act {
 	case store.BuildActCreate:
-		cmd = b.srv.conf.Commands.CmdCreate
+		cmd = b.getCmd("create")
 	case store.BuildActChange:
-		cmd = b.srv.conf.Commands.CmdChange
+		cmd = b.getCmd("change")
 	case store.BuildActUpdate:
-		cmd = b.srv.conf.Commands.CmdUpdate
+		cmd = b.getCmd("update")
 	case store.BuildActDestroy:
-		cmd = b.srv.conf.Commands.CmdDestroy
+		cmd = b.getCmd("destroy")
 	}
 	if len(cmd) == 0 {
 		return nil
@@ -189,6 +189,36 @@ func newBuilds(n *notif, srv *server) ([]*build, error) {
 
 func (b *build) String() string {
 	return fmt.Sprintf("%s: %s", b.stage, b.branch)
+}
+
+func (b *build) getCmd(c string) []string {
+	var cmd []string
+	bcmd := b.srv.conf.Envs[b.project].Commands
+	switch c {
+	case "create":
+		cmd = b.srv.conf.Commands.CmdCreate
+		if bcmd != nil && bcmd.CmdCreate != nil {
+			cmd = bcmd.CmdCreate
+		}
+	case "change":
+		cmd = b.srv.conf.Commands.CmdChange
+		if bcmd != nil && bcmd.CmdChange != nil {
+			cmd = bcmd.CmdChange
+		}
+	case "update":
+		cmd = b.srv.conf.Commands.CmdUpdate
+		if bcmd != nil && bcmd.CmdUpdate != nil {
+			cmd = bcmd.CmdUpdate
+		}
+	case "destroy":
+		cmd = b.srv.conf.Commands.CmdDestroy
+		if bcmd != nil && bcmd.CmdDestroy != nil {
+			cmd = bcmd.CmdDestroy
+		}
+	default:
+		panic("Only use create, change, update, destroy")
+	}
+	return cmd
 }
 
 func (b *build) url(tmpl string) string {
