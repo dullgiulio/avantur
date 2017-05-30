@@ -76,8 +76,9 @@ func (m *Mysql) initStmts() error {
 func (m *Mysql) Add(br *BuildResult) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
-	_, err := m.db.Query(m.stmtAdd, br.Start, br.End, br.Act, br.Ticket, br.Retval, br.SHA1,
+	r, err := m.db.Query(m.stmtAdd, br.Start, br.End, br.Act, br.Ticket, br.Retval, br.SHA1,
 		br.Stage, br.Cmd, br.Branch, br.Stdout, br.Stderr)
+	r.Close()
 	return err
 }
 
@@ -89,13 +90,15 @@ func (m *Mysql) Get(stage string) ([]*BuildResult, error) {
 func (m *Mysql) Delete(stage string) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
-	_, err := m.db.Query(m.stmtDelStage, stage)
+	r, err := m.db.Query(m.stmtDelStage, stage)
+	r.Close()
 	return err
 }
 
 func (m *Mysql) Clean(until time.Time) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
-	_, err := m.db.Query(m.stmtDelClean, until)
+	r, err := m.db.Query(m.stmtDelClean, until)
+	r.Close()
 	return err
 }
