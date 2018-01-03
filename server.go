@@ -52,6 +52,7 @@ type server struct {
 	storage     store.Store
 	urls        *urls
 	log         logger
+	cleanup     chan struct{}
 }
 
 func NewServer(c *config) *server {
@@ -79,7 +80,8 @@ func NewServer(c *config) *server {
 	}
 	s.urls = newUrls()
 	if c.ResultsDuration > 0 && c.ResultsCleanup > 0 {
-		go s.cleaner(time.Duration(c.ResultsDuration), time.Duration(c.ResultsCleanup))
+		s.cleanup = make(chan struct{})
+		go s.cleaner(s.cleanup, time.Duration(c.ResultsCleanup))
 	}
 	return s
 }
@@ -90,17 +92,19 @@ func (s *server) ServeReqs() {
 
 	for n := range s.notifs {
 		s.handleNotif(n, bots, pros)
+		if s.cleanup != nil {
+			s.cleanup <- struct{}{}
+		}
 	}
 }
 
-func (s *server) cleaner(duration, sleep time.Duration) {
-	for {
+func (s *server) cleaner(wakeup <-chan struct{}, duration time.Duration) {
+	for range wakeup {
 		before := time.Now().Add(-duration)
 		s.log.Printf("[server] results cleaner: cleaning jobs before %s", before.Format("2006-02-01 15:04:05"))
 		if err := s.storage.Clean(before); err != nil {
 			s.log.Printf("[error] results cleaner: %s", err)
 		}
-		time.Sleep(sleep)
 	}
 }
 
